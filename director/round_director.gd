@@ -6,18 +6,20 @@ signal round_ended(r: int)
 signal spawn_requested(zone: SpawnZone, health: int, band: int)
 
 var round: int = 0
-var remaining: int = 0
+var remaining: int = 0  # zombies still queued to spawn
 var alive: int = 0
 
+## Injectable: Callable returning the current player count. Invalid = use Net.players.
+var _player_count_provider: Callable = Callable()
+## Injectable: <= 0 means use Content.balance.max_alive.
+var _max_alive_override: int = 0
+
 var _curve: RoundCurve
-var _player_count_provider: Callable = Callable(Net.players.ids(), "size")
-var _player_count: int = 0
 var _zones: Array[SpawnZone] = []
-var _zombies_remaining: int = 0
 var _time: float = 0.0
 var _last_spawn_time: float = 0.0
-var _break_deadline: float = -1.0
-var _max_alive: int = 40
+var _in_break: bool = false
+var _break_end: float = 0.0
 
 func set_curve(curve: RoundCurve) -> void:
 	_curve = curve
@@ -25,51 +27,66 @@ func set_curve(curve: RoundCurve) -> void:
 func set_zones(zones: Array[SpawnZone]) -> void:
 	_zones = zones
 
+func set_player_count_provider(p: Callable) -> void:
+	_player_count_provider = p
+
 func start_match() -> void:
-	_player_count = _player_count_provider.call()
 	_start_round(1)
+
+func max_alive() -> int:
+	if _max_alive_override > 0:
+		return _max_alive_override
+	var content := _autoload("Content")
+	if content != null and content.balance != null:
+		return content.balance.max_alive
+	return 40
+
+func _autoload(n: String) -> Node:
+	var loop := Engine.get_main_loop()
+	if loop is SceneTree:
+		return (loop as SceneTree).root.get_node_or_null(n)
+	return null
+
+func _player_count() -> int:
+	if _player_count_provider.is_valid():
+		return int(_player_count_provider.call())
+	var net := _autoload("Net")
+	if net != null:
+		return net.players.ids().size()
+	return 1
 
 func _start_round(r: int) -> void:
 	round = r
-	remaining = _curve.count(r, _player_count)
+	remaining = _curve.count(r, maxi(1, _player_count()))  # read at each round start
 	alive = 0
-	_zombies_remaining = remaining
 	_time = 0.0
-	_last_spawn_time = -_curve.spawn_interval(round)  # Allow immediate spawn at round start
-	_break_deadline = -1.0
-	emit_signal("round_started", r)
+	_last_spawn_time = -_curve.spawn_interval(r)  # first spawn is immediate
+	_in_break = false
+	round_started.emit(r)
 
 func tick(dt: float) -> void:
-	if _curve == null:
+	if _curve == null or round == 0:
 		return
 	_time += dt
-	
-	if _break_deadline > 0:
-		if _time > _break_deadline:
-			_break_deadline = -1.0
+	if _in_break:
+		if _time >= _break_end:
 			_start_round(round + 1)
 		return
-	
-	if _zombies_remaining > 0 and alive < _max_alive:
-		var interval := _curve.spawn_interval(round)
-		var time_since_spawn := _time - _last_spawn_time
-		if time_since_spawn >= interval:
-			_spawn_zombie()
+	if remaining > 0 and alive < max_alive() \
+			and _time - _last_spawn_time >= _curve.spawn_interval(round):
+		_spawn_zombie()
 
 func _spawn_zombie() -> void:
-	var open_zones := _get_open_zones()
-	if open_zones.size() == 0:
+	var open_zones := _active_zones()
+	if open_zones.is_empty():
 		return
-	var zone := open_zones[randi() % open_zones.size()]
-	var health := _curve.health(round)
-	var band := _curve.speed_band(round)
+	var zone: SpawnZone = open_zones[randi() % open_zones.size()]
 	alive += 1
+	remaining -= 1
 	_last_spawn_time = _time
-	_zombies_remaining -= 1
-	remaining = max(0, _zombies_remaining)
-	emit_signal("spawn_requested", zone, health, band)
+	spawn_requested.emit(zone, _curve.health(round), _curve.speed_band(round))
 
-func _get_open_zones() -> Array[SpawnZone]:
+func _active_zones() -> Array[SpawnZone]:
 	var result: Array[SpawnZone] = []
 	for z in _zones:
 		if z.active:
@@ -77,10 +94,8 @@ func _get_open_zones() -> Array[SpawnZone]:
 	return result
 
 func on_zombie_died() -> void:
-	alive = max(0, alive - 1)
-	if alive == 0 and _zombies_remaining == 0 and _break_deadline < 0:
-		_start_break()
-
-func _start_break() -> void:
-	_break_deadline = _time + _curve.break_s
-	emit_signal("round_ended", round)
+	alive = maxi(0, alive - 1)
+	if alive == 0 and remaining == 0 and not _in_break:
+		_in_break = true
+		_break_end = _time + _curve.break_s
+		round_ended.emit(round)
