@@ -33,7 +33,7 @@ func test_map_has_required_nodes() -> void:
 	var nodes := _all(m, [])
 	assert_eq(_count(nodes, "Zone"), 5, "zones")
 	assert_eq(_count(nodes, "Barricade"), 2, "barricades")
-	assert_eq(_count(nodes, "BulkheadDoor"), 4, "doors")
+	assert_eq(_count(nodes, "BulkheadDoor"), 5, "doors (4 zone doors + the loop shortcut)")
 	assert_eq(_count(nodes, "WallBuy"), 1, "wall buy")
 	assert_eq(_count(nodes, "SudsMachine"), 4, "suds machines")
 	assert_eq(_count(nodes, "CrateSpot"), 3, "crate spots")
@@ -46,19 +46,23 @@ func test_map_has_required_nodes() -> void:
 	assert_eq(starts, 4, "player starts")
 	var open_ids := {}
 	var costs := {}
+	var door_costs := {}
 	for n in nodes:
 		if n is Zone:
 			assert_true(n.zone_id in ZONES, "zone id " + str(n.zone_id))
 			if n.open:
 				open_ids[n.zone_id] = true
 		elif n is BulkheadDoor:
-			costs[n.unlocks[0]] = n.cost
+			door_costs[n.name] = [n.cost, n.unlocks]
+			if n.name != &"Door_loop":
+				costs[n.unlocks[0]] = n.cost
 		elif n is WallBuy:
 			assert_eq(n.weapon_id, &"sentinel_45", "wall buy weapon")
 		elif n is SudsMachine:
 			assert_true(n.suds != null, "machine has suds")
 	assert_eq(open_ids.keys(), [&"entrance_lab"], "only the start zone is open")
 	assert_eq(costs, {&"cafeteria": 750, &"offices": 1000, &"reactor_wing": 1250, &"refit_chamber": 1500}, "door costs")
+	assert_eq(door_costs[&"Door_loop"], [1250, [&"reactor_wing"] as Array[StringName]], "loop door opens the reactor wing")
 	var per := {}
 	var active_crates := 0
 	for n in nodes:
@@ -71,14 +75,14 @@ func test_map_has_required_nodes() -> void:
 	assert_eq(active_crates, 1, "one active crate")
 	m.free()
 
-func _reach(m: Node3D, map: RID, from: Vector3, to: Vector3) -> bool:
+func _reach(map: RID, from: Vector3, to: Vector3) -> bool:
 	var p := NavigationServer3D.map_get_path(map, from, to, true)
 	if p.is_empty():
 		return false
 	var e: Vector3 = p[p.size() - 1]
 	return Vector2(e.x - to.x, e.z - to.z).length() < 1.0
 
-## Builds a private NavigationServer3D map from the scene (the unit runner has no frame loop, so the scene's own
+## Builds a private NavigationServer3D map from the scene (the nodes are not in the tree, so the scene's own
 ## region/links are mirrored onto RIDs by hand). Returns {map, links: [[RID, NavigationLink3D, Transform3D]]}.
 func _nav_of(m: Node3D) -> Dictionary:
 	var map := NavigationServer3D.map_create()
@@ -113,13 +117,12 @@ func _sync_links(nav: Dictionary) -> void:
 	for i in 20:                                   # the server rebuilds the map over a few physics frames
 		await tree.physics_frame
 
-func test_all_zones_reachable_after_doors():
-	var m := _load()
-	if m == null:
-		return
+func _setup(m: Node3D) -> Dictionary:
 	var zone_pos := {}
-	var doors: Array[BulkheadDoor] = []
+	var doors := {}
 	var starts: Array = []
+	var spawns: Array = []
+	var barricades: Array[Barricade] = []
 	var nm: NavigationMesh = null
 	for n in _all(m, []):
 		if n.is_in_group(&"player_starts"):
@@ -129,29 +132,101 @@ func test_all_zones_reachable_after_doors():
 		elif n is Zone:
 			zone_pos[n.zone_id] = n.position
 		elif n is BulkheadDoor:
-			doors.append(n)
+			doors[n.name] = n
+		elif n is SpawnZone:
+			spawns.append(n)
+		elif n is Barricade:
+			barricades.append(n)
 	assert_true(nm != null and nm.get_polygon_count() > 0, "baked nav mesh")
-	if nm == null:
+	return {"zone_pos": zone_pos, "doors": doors, "starts": starts, "spawns": spawns, "barricades": barricades, "nm": nm}
+
+func _reached(map: RID, from: Vector3, zone_pos: Dictionary) -> Array:
+	var out := []
+	for z in ZONES:
+		if _reach(map, from, zone_pos[z]):
+			out.append(z)
+	return out
+
+func test_all_zones_reachable_after_doors():
+	var m := _load()
+	if m == null:
+		return
+	var info := _setup(m)
+	if info["nm"] == null:
 		m.free()
 		return
+	var zone_pos: Dictionary = info["zone_pos"]
+	var doors: Dictionary = info["doors"]
+	var starts: Array = info["starts"]
 	var nav := _nav_of(m)
 	var map: RID = nav["map"]
 	await _sync_links(nav)
 	var from: Vector3 = (starts[0] as Node3D).position
-	assert_true(_reach(m, map, from, zone_pos[&"entrance_lab"]), "start reaches entrance_lab")
-	for z in ZONES.slice(1):
-		assert_true(not _reach(m, map, from, zone_pos[z]), "closed doors block " + str(z))
 	for s in starts:
-		assert_true(_reach(m, map, from, (s as Node3D).position), "start reachable from start")
-	for d in doors:
-		d.set_open(true)
+		assert_true(_reach(map, from, (s as Node3D).position), "start reachable from start")
+	assert_eq(_reached(map, from, zone_pos), [&"entrance_lab"], "all closed: only the lab")
+	# [open doors, expected reachable zones]
+	var cases := [
+		[["Door_cafeteria"], [&"entrance_lab", &"cafeteria"]],
+		[["Door_cafeteria", "Door_offices"], [&"entrance_lab", &"cafeteria", &"offices"]],
+		[["Door_loop"], [&"entrance_lab", &"reactor_wing"]],
+		[["Door_loop", "Door_refit"], [&"entrance_lab", &"reactor_wing", &"refit_chamber"]],
+		[["Door_offices", "Door_reactor", "Door_refit"], [&"entrance_lab"]],                 # chain doors alone: cafeteria still shut
+		[["Door_cafeteria", "Door_offices", "Door_reactor"], [&"entrance_lab", &"cafeteria", &"offices", &"reactor_wing"]],
+		[["Door_cafeteria", "Door_offices", "Door_reactor", "Door_refit"], ZONES],
+	]
+	for c in cases:
+		for d in doors.values():
+			d.set_open(d.name in c[0])
+		await _sync_links(nav)
+		assert_eq(_reached(map, from, zone_pos), c[1], "doors open %s" % [c[0]])
+	# the loop: with every door open, lab -> cafeteria -> offices -> reactor -> lab must exist without the loop door
+	# (and the other way round without the chain doors), i.e. two disjoint routes.
+	for d in doors.values():
+		d.set_open(d.name != "Door_loop")
 	await _sync_links(nav)
-	for z in ZONES:
-		assert_true(_reach(m, map, from, zone_pos[z]), "open doors reach " + str(z))
-	for d in doors:
+	assert_true(_reach(map, from, zone_pos[&"reactor_wing"]), "lab reaches reactor via the long way")
+	for d in doors.values():
+		d.set_open(d.name == "Door_loop" or d.name == "Door_reactor" or d.name == "Door_offices" or d.name == "Door_cafeteria")
+	await _sync_links(nav)
+	assert_true(_reach(map, zone_pos[&"offices"], zone_pos[&"reactor_wing"]), "offices reach reactor")
+	assert_true(_reach(map, zone_pos[&"reactor_wing"], from), "reactor reaches lab via the loop door")
+	for e in nav["links"]:
+		NavigationServer3D.free_rid(e[0])
+	for r in nav["regions"]:
+		NavigationServer3D.free_rid(r)
+	NavigationServer3D.free_rid(map)
+	m.free()
+
+func test_barricades_gate_yard_and_spawns_on_mesh():
+	var m := _load()
+	if m == null:
+		return
+	var info := _setup(m)
+	if info["nm"] == null:
+		m.free()
+		return
+	var nav := _nav_of(m)
+	var map: RID = nav["map"]
+	for d in info["doors"].values():
 		d.set_open(false)
+	var spawns: Array = info["spawns"]
+	var yard: Array = spawns.filter(func(s): return s.zone_id == &"entrance_lab")
+	assert_true(yard.size() >= 2, "yard spawns")
+	var start: Vector3 = (info["starts"][0] as Node3D).position
+	for b in info["barricades"]:
+		b.set_boards(b.max_boards)
 	await _sync_links(nav)
-	assert_true(not _reach(m, map, from, zone_pos[&"cafeteria"]), "closing re-blocks")
+	for sz in yard:
+		assert_true(not _reach(map, sz.position, start), "6 boards: no path from yard spawn %s" % sz.name)
+	for b in info["barricades"]:
+		b.set_boards(0)
+	await _sync_links(nav)
+	for sz in yard:
+		assert_true(_reach(map, sz.position, start), "0 boards: path from yard spawn %s" % sz.name)
+	for sz in spawns:                                # every spawn point sits on the baked mesh
+		var cp := NavigationServer3D.map_get_closest_point(map, sz.position)
+		assert_true(Vector2(cp.x - sz.position.x, cp.z - sz.position.z).length() < 0.3, "spawn on navmesh: %s" % sz.name)
 	for e in nav["links"]:
 		NavigationServer3D.free_rid(e[0])
 	for r in nav["regions"]:

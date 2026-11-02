@@ -232,16 +232,30 @@ func _strip(cx: float, cz: float, along_x: bool, col := "strip") -> void:
 	else:
 		_deco("Strip_%d_%d" % [cx, cz], cx - 0.1, cz - len / 2.0, cx + 0.1, cz + len / 2.0, H - 0.12, H - 0.02, col)
 
-func _vent(x: float, z: float, facing: Vector2) -> void:
-	# a wall grille with dark slats; facing is the room-side direction
-	if absf(facing.x) > 0.0:
-		_deco("Vent_%d_%d" % [x, z], x - 0.1 * signf(facing.x) - 0.04, z - 0.9, x + 0.1 * signf(facing.x) + 0.04, z + 0.9, 0.5, 1.5, "vent")
-	else:
-		_deco("Vent_%d_%d" % [x, z], x - 0.9, z - 0.1 * signf(facing.y) - 0.04, x + 0.9, z + 0.1 * signf(facing.y) + 0.04, 0.5, 1.5, "vent")
-
 # ---------------------------------------------------------------- structure
+const NICHE_D := 2.0
+const NICHE_W := 2.4
+
+## A service niche (vent alcove) in a wall along Z at x=wx, opening toward -s (room side), going out by s. Returns its spawn point.
+func _niche(wx: float, zc: float, s: float) -> Vector3:
+	var xo := wx + s * NICHE_D
+	var xa := minf(wx, xo)
+	var xb := maxf(wx, xo)
+	_wall_x(zc - NICHE_W / 2.0, xa, xb, [], "NS")
+	_wall_x(zc + NICHE_W / 2.0, xa, xb, [], "NS")
+	_wall_z(xo, zc - NICHE_W / 2.0, zc + NICHE_W / 2.0, [], "NB")
+	_floor("niche_%d_%d" % [wx, zc], xa, zc - NICHE_W / 2.0, xb, zc + NICHE_W / 2.0)
+	var gx := xo - s * 0.25
+	_deco("Grille_%d_%d" % [wx, zc], gx - 0.05, zc - 0.9, gx + 0.05, zc + 0.9, 0.4, 1.7, "vent")
+	_deco("GrilleFrame_%d_%d" % [wx, zc], gx - 0.08, zc - 1.0, gx + 0.08, zc + 1.0, 1.7, 1.85, "metal")
+	return Vector3(wx + s * 0.9, 0.2, zc)
+
+func _gap_z(zc: float) -> Array:
+	return [zc - NICHE_W / 2.0, zc + NICHE_W / 2.0]
+
+var niche_spawns := {}
+
 func _structure() -> void:
-	# floors: rooms, corridors, yard
 	_floor("A", -10, 0, 10, 16)
 	_floor("B", 18, 0, 38, 16)
 	_floor("C", 18, 24, 38, 40)
@@ -251,39 +265,43 @@ func _structure() -> void:
 	_floor("c2", 26, 16, 30, 24)
 	_floor("c3", 10, 30, 18, 34)
 	_floor("c4", -2, 40, 2, 48)
+	_floor("c5", -2, 16, 2, 24)
 	_box(solids, "Floor_yard", -14, -9, 14, 0, -0.3, 0.0, "yard")
-	# yard perimeter (also a short stub of wall each side of the lab front)
 	_wall_x(-9, -14, 14, [], "Yard")
 	_wall_z(-14, -9, 0, [], "YardW")
 	_wall_z(14, -9, 0, [], "YardE")
 	_wall_x(0, -14, -10, [], "YardS1")
 	_wall_x(0, 10, 14, [], "YardS2")
-	# A entrance_lab: N windows at x=-5, 5; E opening to c1
+	# A entrance_lab: N windows at x=-5, 5; E opening to c1; S opening to c5 (loop door)
 	_wall_x(0, -10, 10, [[-6, -4, "window"], [4, 6, "window"]], "A_N")
 	_wall_z(10, 0, 16, [[6, 10]], "A_E")
-	_wall_x(16, -10, 10, [], "A_S")
+	_wall_x(16, -10, 10, [[-2, 2]], "A_S")
 	_wall_z(-10, 0, 16, [], "A_W")
-	# B cafeteria
+	# B cafeteria (east wall has two service niches)
 	_wall_x(0, 18, 38, [], "B_N")
-	_wall_z(38, 0, 16, [], "B_E")
+	_wall_z(38, 0, 16, [_gap_z(3.0), _gap_z(13.0)], "B_E")
+	niche_spawns[&"cafeteria"] = [_niche(38, 3.0, 1.0), _niche(38, 13.0, 1.0)]
 	_wall_x(16, 18, 38, [[26, 30]], "B_S")
 	_wall_z(18, 0, 16, [[6, 10]], "B_W")
 	# C offices
 	_wall_x(24, 18, 38, [[26, 30]], "C_N")
-	_wall_z(38, 24, 40, [], "C_E")
+	_wall_z(38, 24, 40, [_gap_z(27.0), _gap_z(37.0)], "C_E")
+	niche_spawns[&"offices"] = [_niche(38, 27.0, 1.0), _niche(38, 37.0, 1.0)]
 	_wall_x(40, 18, 38, [], "C_S")
 	_wall_z(18, 24, 40, [[30, 34]], "C_W")
-	# D reactor_wing
-	_wall_x(24, -10, 10, [], "D_N")
+	# D reactor_wing (west wall niches; north opening to the loop corridor c5)
+	_wall_x(24, -10, 10, [[-2, 2]], "D_N")
 	_wall_z(10, 24, 40, [[30, 34]], "D_E")
 	_wall_x(40, -10, 10, [[-2, 2]], "D_S")
-	_wall_z(-10, 24, 40, [], "D_W")
-	# E refit_chamber
+	_wall_z(-10, 24, 40, [_gap_z(27.0), _gap_z(37.0)], "D_W")
+	niche_spawns[&"reactor_wing"] = [_niche(-10, 27.0, -1.0), _niche(-10, 37.0, -1.0)]
+	# E refit_chamber (east wall niches)
 	_wall_x(48, -10, 10, [[-2, 2]], "E_N")
-	_wall_z(10, 48, 62, [], "E_E")
+	_wall_z(10, 48, 62, [_gap_z(52.0), _gap_z(59.0)], "E_E")
+	niche_spawns[&"refit_chamber"] = [_niche(10, 52.0, 1.0), _niche(10, 59.0, 1.0)]
 	_wall_x(62, -10, 10, [], "E_S")
 	_wall_z(-10, 48, 62, [], "E_W")
-	# corridors (side walls) with a door frame pinching the opening to 2 m at the door line
+	# corridors
 	_wall_x(6, 10, 18, [], "c1_N")
 	_wall_x(10, 10, 18, [], "c1_S")
 	_wall_z(14, 6, 10, [[7, 9]], "c1_door")
@@ -296,25 +314,95 @@ func _structure() -> void:
 	_wall_z(-2, 40, 48, [], "c4_W")
 	_wall_z(2, 40, 48, [], "c4_E")
 	_wall_x(44, -2, 2, [[-1, 1]], "c4_door")
+	_wall_z(-2, 16, 24, [], "c5_W")
+	_wall_z(2, 16, 24, [], "c5_E")
+	_wall_x(20, -2, 2, [[-1, 1]], "c5_door")
+
+# ---------------------------------------------------------------- CC0 models (Poly Haven glTF)
+func _aabb_of(n: Node, xf: Transform3D) -> AABB:
+	var out := AABB()
+	var have := false
+	if n is MeshInstance3D and n.mesh != null:
+		out = xf * (n as MeshInstance3D).get_aabb()
+		have = true
+	for c in n.get_children():
+		if c is Node3D:
+			var a := _aabb_of(c, xf * (c as Node3D).transform)
+			if a.size != Vector3.ZERO:
+				out = a if not have else out.merge(a)
+				have = true
+	return out
+
+## Instances models/<id>, grounds it (AABB min y = 0, centred on x/z), wraps it in a collider (layer 1) if `collide`.
+## `scale` is uniform. Returns the wrapper.
+func _prop(id: String, pos: Vector3, rot_y := 0.0, scale := 1.0, collide := true) -> Node3D:
+	var ps: PackedScene = load("res://content/art/polyhaven_models/%s/%s_1k.gltf" % [id, id])
+	var inst: Node3D = ps.instantiate()
+	var bb := _aabb_of(inst, Transform3D.IDENTITY)
+	var wrap: Node3D
+	if collide:
+		var sb := StaticBody3D.new()
+		sb.collision_layer = 1
+		sb.collision_mask = 0
+		wrap = sb
+	else:
+		wrap = Node3D.new()
+	wrap.name = "%s_%d_%d" % [id, int(pos.x * 10), int(pos.z * 10)]
+	wrap.position = pos
+	wrap.rotation.y = rot_y
+	props.add_child(wrap)
+	_own(wrap)
+	var c := bb.get_center()
+	inst.scale = Vector3.ONE * scale
+	inst.position = Vector3(-c.x, -bb.position.y, -c.z) * scale
+	inst.name = "Model"
+	wrap.add_child(inst)
+	_own(inst)
+	if collide:
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = bb.size * scale
+		cs.shape = bs
+		cs.position = Vector3(0, bs.size.y / 2.0, 0)
+		cs.name = "Shape"
+		wrap.add_child(cs)
+		_own(cs)
+	return wrap
 
 # ---------------------------------------------------------------- dressing: props, signs, lights
 func _dressing() -> void:
-	# --- A entrance_lab: warm sodium + a fluorescent strip, lab benches
+	# --- A entrance_lab: warm sodium + fluorescent strips; lab benches and equipment racks
 	_obstacle("A_Bench", 0, 7.5, 8, 1.5, 1.0, "teal")
-	_obstacle("A_Locker1", -8.8, 3, 1.2, 4.0, 2.0)
-	_obstacle("A_Locker2", 8.8, 13, 1.2, 4.0, 2.0)
+	_deco("A_BenchTop", -4.0, 6.7, 4.0, 8.3, 1.0, 1.06, "metal")
+	_prop("worn_metal_rack", Vector3(-9.0, 0, 3.0), PI / 2.0)
+	_prop("worn_metal_rack", Vector3(-9.0, 0, 13.5), PI / 2.0)
+	_prop("worn_metal_rack", Vector3(9.0, 0, 13.5), -PI / 2.0)
+	_prop("worn_metal_rack", Vector3(-8.6, 0, 1.3), 0.0)
+	_prop("worn_metal_rack", Vector3(8.6, 0, 1.3), 0.0)
+	_prop("tool_cart", Vector3(7.5, 0, 9.0), 0.4)
+	_prop("industrial_storage_cart", Vector3(-6.5, 0, 11.5), -0.3)
+	_prop("portable_welding_cart", Vector3(8.5, 0, 4.5), 1.2)
+	_prop("old_military_crate", Vector3(-2.5, 0, 3.0), 0.2)
 	_light(Vector3(-5, 2.7, 8), Color(1.0, 0.72, 0.38), 2.2, 13, true)
 	_light(Vector3(5, 2.7, 8), Color(1.0, 0.72, 0.38), 2.2, 13)
 	_light(Vector3(0, 2.8, 13), Color(0.8, 0.9, 1.0), 1.4, 11)
 	_strip(0, 3, true)
 	_strip(0, 12, true)
-	_sign("SITE 62\nAUTHORISED PERSONNEL", Vector3(0, 2.4, 15.75), PI, 52, Color(0.1, 0.1, 0.1), Color(0.95, 0.88, 0.62), 3.2)
+	_sign("SITE 62\nAUTHORISED PERSONNEL", Vector3(0, 2.4, 0.22), 0.0, 52, Color(0.1, 0.1, 0.1), Color(0.95, 0.88, 0.62), 3.2)
 	_sign("BULKHEAD 1 >", Vector3(9.78, 2.4, 3.0), -PI / 2.0, 44, Color(0.1, 0.1, 0.1), Color(0.95, 0.88, 0.62), 1.8)
-	# --- B cafeteria: tables, pillar
-	_obstacle("B_Table1", 24.5, 5, 5, 1.5, 1.0, "wood")
-	_obstacle("B_Table2", 31.5, 5, 5, 1.5, 1.0, "wood")
+	_sign("REACTOR WING v", Vector3(-3.4, 2.4, 15.75), PI, 36, Color(0.95, 0.9, 0.9), Color(0.7, 0.08, 0.05), 1.7)
+	# --- B cafeteria: tables, chairs, serving counter
 	_obstacle("B_Pillar", 28, 11, 1.2, 1.2, H, "wall")
+	_prop("dining_table", Vector3(24.5, 0, 5.0), 0.0, 1.3)
+	_prop("dining_table", Vector3(31.5, 0, 5.0), PI / 2.0, 1.3)
+	_prop("dining_table", Vector3(22.5, 0, 12.5), 0.3, 1.3)
+	for p in [Vector3(23.2, 0, 3.6), Vector3(25.8, 0, 6.4), Vector3(29.8, 0, 5.0), Vector3(33.2, 0, 5.0), Vector3(21.5, 0, 11.3), Vector3(23.8, 0, 13.8)]:
+		_prop("dining_chair_02", p, p.x * 7.0, 1.0, false)
 	_obstacle("B_Counter", 34, 14.6, 6, 1.2, 1.0, "mustard")
+	_deco("B_CounterTop", 31.0, 14.0, 37.0, 15.2, 1.0, 1.06, "metal")
+	_prop("CoffeeCart_01", Vector3(30.0, 0, 14.4), 0.0)
+	for x in [32.0, 33.5, 35.0]:
+		_prop("metal_stool_01", Vector3(x, 0, 12.9), 0.0, 1.0, false)
 	_light(Vector3(24, 2.7, 8), Color(1.0, 0.72, 0.38), 2.0, 12, true)
 	_light(Vector3(32, 2.7, 8), Color(1.0, 0.72, 0.38), 2.0, 12)
 	_light(Vector3(28, 2.8, 13), Color(0.8, 0.9, 1.0), 1.2, 10)
@@ -322,21 +410,38 @@ func _dressing() -> void:
 	_strip(32, 12, true)
 	_sign("CAFETERIA", Vector3(18.22, 2.4, 11.5), PI / 2.0, 64, Color(0.1, 0.1, 0.1), Color(0.95, 0.88, 0.62), 2.2)
 	_sign("COFFEE - 5c", Vector3(28, 2.4, 0.22), 0.0, 52, Color(0.1, 0.1, 0.1), Color(0.5, 0.8, 0.8), 2.0)
-	# --- C offices: desks, filing cabinets
-	_obstacle("C_Desk1", 24, 29, 4, 1.6, 0.9, "wood")
-	_obstacle("C_Desk2", 32, 29, 4, 1.6, 0.9, "wood")
-	_obstacle("C_Desk3", 28, 36, 6, 1.6, 0.9, "wood")
-	_obstacle("C_Filing", 23, 39.2, 5, 0.8, 1.6, "metal")
+	# --- C offices: desks, filing cabinets, partitions
+	_prop("metal_office_desk", Vector3(24, 0, 29), 0.0)
+	_prop("metal_office_desk", Vector3(32, 0, 29), 0.0)
+	_prop("metal_office_desk", Vector3(28, 0, 36), PI)
+	_prop("SchoolChair_01", Vector3(24, 0, 30.4), PI, 1.0, false)
+	_prop("SchoolChair_01", Vector3(32, 0, 30.4), PI, 1.0, false)
+	_prop("SchoolChair_01", Vector3(28, 0, 34.6), 0.0, 1.0, false)
+	_prop("vintage_radio_transceiver", Vector3(32.3, 0.78, 29), 0.5, 1.0, false)
+	_prop("drawer_cabinet", Vector3(21.5, 0, 39.2), PI)
+	_prop("drawer_cabinet", Vector3(23.3, 0, 39.2), PI)
+	_prop("vintage_cabinet_01", Vector3(25.5, 0, 39.2), PI)
+	_prop("vintage_cabinet_01", Vector3(19.2, 0, 26.0), PI / 2.0)
+	_obstacle("C_Partition1", 24, 33.0, 3.4, 0.15, 1.7, "teal")
+	_obstacle("C_Partition2", 32, 33.0, 3.4, 0.15, 1.7, "teal")
 	_light(Vector3(24, 2.7, 32), Color(1.0, 0.72, 0.38), 2.0, 12)
 	_light(Vector3(32, 2.7, 32), Color(0.8, 0.9, 1.0), 1.6, 12, true)
 	_strip(24, 36, true)
 	_strip(32, 36, true)
 	_strip(28, 27, false)
 	_sign("OFFICES - LEVEL B", Vector3(28, 2.4, 24.22), 0.0, 52, Color(0.1, 0.1, 0.1), Color(0.95, 0.88, 0.62), 2.6)
-	# --- D reactor_wing: central reactor core, red emergency lights
+	# --- D reactor_wing: core, pipes, consoles, crates; red emergency light
 	_obstacle("D_Core", 0, 32, 6, 6, H, "metal")
 	_deco("D_CoreRing", -3.2, 28.8, 3.2, 35.2, 1.4, 1.7, "redglow")
 	_obstacle("D_Panel", 8.8, 26.5, 1.2, 3.5, 2.2, "metal")
+	_deco("D_PanelScreen", 8.15, 25.4, 8.2, 27.6, 1.3, 1.9, "redglow")
+	_prop("modular_industrial_pipes_01", Vector3(5.5, 0, 24.9), 0.0)
+	_prop("portable_generator", Vector3(8.4, 0, 37.5), -0.5)
+	_prop("old_military_crate", Vector3(-8.3, 0, 31.0), PI / 2.0)
+	_prop("old_military_crate", Vector3(-8.3, 0, 33.5), PI / 2.0 + 0.2)
+	_prop("propane_tank", Vector3(-8.5, 0, 34.8), 0.0)
+	_prop("Barrel_01", Vector3(4.6, 0, 38.6), 0.0)
+	_prop("Barrel_01", Vector3(5.8, 0, 38.9), 0.0)
 	_light(Vector3(-6, 2.8, 28), Color(1.0, 0.1, 0.05), 2.6, 11)
 	_light(Vector3(6, 2.8, 37), Color(1.0, 0.1, 0.05), 2.6, 11)
 	_light(Vector3(0, 2.8, 32), Color(1.0, 0.2, 0.1), 2.0, 10, true)
@@ -344,9 +449,16 @@ func _dressing() -> void:
 	_strip(-6, 25, true, "redglow")
 	_strip(6, 25, true, "redglow")
 	_sign("REACTOR WING\nAUTHORISED ONLY", Vector3(9.78, 2.4, 27.0), -PI / 2.0, 46, Color(0.95, 0.9, 0.9), Color(0.7, 0.08, 0.05), 2.4)
-	# --- E refit_chamber: cold, clean
-	_obstacle("E_Crates1", -5, 53, 2, 2, 2.0, "wood")
-	_obstacle("E_Crates2", 5, 53, 2, 2, 2.0, "wood")
+	# --- E refit_chamber: machinery, cold light
+	_prop("modular_pipes", Vector3(-9.0, 0, 51.5), PI / 2.0)
+	_prop("portable_generator", Vector3(8.4, 0, 55.5), PI)
+	_prop("plastic_crate_01", Vector3(-5.0, 0, 53.0), 0.3)
+	_prop("plastic_crate_01", Vector3(-5.0, 0.4, 53.0), 0.7, 1.0, false)
+	_prop("tool_cart", Vector3(5.0, 0, 53.5), -0.4)
+	_prop("industrial_storage_cart", Vector3(-8.2, 0, 58.5), PI / 2.0)
+	_prop("portable_generator", Vector3(-4.0, 0, 59.5), 0.2, 1.4)
+	_prop("portable_generator", Vector3(4.0, 0, 59.5), -0.2, 1.4)
+	_prop("modular_industrial_pipes_01", Vector3(-6.0, 0, 48.9), 0.0)
 	_obstacle("E_Plinth", 0, 61.0, 3.2, 1.6, 0.3, "mustard")
 	_light(Vector3(-5, 2.8, 52), Color(0.75, 0.9, 1.0), 2.4, 12, true)
 	_light(Vector3(5, 2.8, 52), Color(0.75, 0.9, 1.0), 2.4, 12)
@@ -359,26 +471,17 @@ func _dressing() -> void:
 	_light(Vector3(28, 2.8, 20), Color(1.0, 0.72, 0.38), 1.4, 7)
 	_light(Vector3(14, 2.8, 32), Color(1.0, 0.72, 0.38), 1.4, 7)
 	_light(Vector3(0, 2.8, 44), Color(1.0, 0.2, 0.1), 1.6, 7)
-	# --- yard: moonlit courtyard, wrecked vehicle barriers
-	_obstacle("Yard_Barrier1", -8, -4.5, 3, 0.8, 1.0, "metal")
-	_obstacle("Yard_Barrier2", 8, -4.5, 3, 0.8, 1.0, "metal")
+	_light(Vector3(0, 2.8, 20), Color(1.0, 0.2, 0.1), 1.6, 7)
+	# --- yard
+	_prop("old_military_crate", Vector3(-11.5, 0, -6.0), 0.3)
+	_prop("old_military_crate", Vector3(11.5, 0, -6.0), -0.3)
 	_light(Vector3(0, 4.5, -4), Color(0.55, 0.65, 1.0), 3.0, 22)
 	_light(Vector3(-9, 3, -2), Color(1.0, 0.72, 0.38), 2.4, 9)
 	_light(Vector3(9, 3, -2), Color(1.0, 0.72, 0.38), 2.4, 9)
-	# floor hazard stripes at each bulkhead
 	for p in [Vector3(14, 0, 8), Vector3(14, 0, 32)]:
 		_deco("Hazard_%d_%d" % [p.x, p.z], p.x - 0.5, p.z - 2, p.x + 0.5, p.z + 2, 0.0, 0.02, "hazard")
-	for p in [Vector3(28, 0, 20), Vector3(0, 0, 44)]:
+	for p in [Vector3(28, 0, 20), Vector3(0, 0, 44), Vector3(0, 0, 20)]:
 		_deco("Hazard_%d_%d" % [p.x, p.z], p.x - 2, p.z - 0.5, p.x + 2, p.z + 0.5, 0.0, 0.02, "hazard")
-	# spawn vents (behind-the-grille spawns)
-	_vent(37.8, 13, Vector2(-1, 0))
-	_vent(37.8, 2.5, Vector2(-1, 0))
-	_vent(37.8, 26, Vector2(-1, 0))
-	_vent(37.8, 38, Vector2(-1, 0))
-	_vent(-9.8, 26, Vector2(1, 0))
-	_vent(-9.8, 38, Vector2(1, 0))
-	_vent(9.8, 52, Vector2(-1, 0))
-	_vent(-9.8, 60, Vector2(1, 0))
 
 # ---------------------------------------------------------------- map kit
 func _inst(path: String, name: String, pos: Vector3, rot_y := 0.0) -> Node3D:
@@ -391,8 +494,8 @@ func _inst(path: String, name: String, pos: Vector3, rot_y := 0.0) -> Node3D:
 	return n
 
 func _kit() -> void:
-	var zones := {&"entrance_lab": Vector3(0, 0, 11), &"cafeteria": Vector3(24, 0, 13), &"offices": Vector3(28, 0, 32),
-		&"reactor_wing": Vector3(-6, 0, 27), &"refit_chamber": Vector3(0, 0, 53)}
+	var zones := {&"entrance_lab": Vector3(0, 0, 11), &"cafeteria": Vector3(24, 0, 9.0), &"offices": Vector3(28, 0, 32),
+		&"reactor_wing": Vector3(-4.5, 0, 27), &"refit_chamber": Vector3(0, 0, 55.5)}
 	for zid in zones:
 		var z := Zone.new()
 		z.name = "Zone_" + zid
@@ -401,19 +504,15 @@ func _kit() -> void:
 		z.position = zones[zid]
 		map.add_child(z)
 		_own(z)
-	var spawns := {
-		&"entrance_lab": [Vector3(-9, 0.2, -5), Vector3(9, 0.2, -5), Vector3(0, 0.2, -7)],
-		&"cafeteria": [Vector3(37, 0.2, 13), Vector3(37, 0.2, 2.5), Vector3(20, 0.2, 1.5)],
-		&"offices": [Vector3(37, 0.2, 26), Vector3(37, 0.2, 38), Vector3(20, 0.2, 26)],
-		&"reactor_wing": [Vector3(-9, 0.2, 26), Vector3(-9, 0.2, 38), Vector3(8, 0.2, 38.5)],
-		&"refit_chamber": [Vector3(9, 0.2, 52), Vector3(-9, 0.2, 60), Vector3(9, 0.2, 60)]}
+	var spawns := {&"entrance_lab": [Vector3(-9, 0.2, -5), Vector3(9, 0.2, -5), Vector3(0, 0.2, -7)]}
+	for zid in niche_spawns:
+		spawns[zid] = niche_spawns[zid]
 	for zid in spawns:
 		var i := 0
 		for p in spawns[zid]:
 			var s := _inst("res://mapkit/spawn_zone.tscn", "Spawn_%s_%d" % [zid, i], p)
 			s.zone_id = zid
 			i += 1
-	# 4 player starts in the entrance lab
 	for i in 4:
 		var m := Marker3D.new()
 		m.name = "PlayerStart%d" % (i + 1)
@@ -421,12 +520,10 @@ func _kit() -> void:
 		m.add_to_group(&"player_starts", true)
 		map.add_child(m)
 		_own(m)
-	# barricades on the two windows (local +Z = outside = north)
 	_inst("res://mapkit/barricade.tscn", "Barricade_W", Vector3(-5, 0, 0), PI)
 	_inst("res://mapkit/barricade.tscn", "Barricade_E", Vector3(5, 0, 0), PI)
 	for x in [-5.0, 5.0]:
 		_deco("Boards_%d" % x, x - 0.9, -0.12, x + 0.9, 0.12, 1.1, 1.9, "board")
-	# doors
 	var d1 := _inst("res://mapkit/bulkhead_door.tscn", "Door_cafeteria", Vector3(14, 0, 8), PI / 2.0)
 	d1.cost = 750
 	d1.unlocks.append(&"cafeteria")
@@ -439,7 +536,10 @@ func _kit() -> void:
 	var d4 := _inst("res://mapkit/bulkhead_door.tscn", "Door_refit", Vector3(0, 0, 44))
 	d4.cost = 1500
 	d4.unlocks.append(&"refit_chamber")
-	for d in [d1, d2, d3, d4]:
+	var d5 := _inst("res://mapkit/bulkhead_door.tscn", "Door_loop", Vector3(0, 0, 20))     # lab <-> reactor shortcut: closes the loop
+	d5.cost = 1250
+	d5.unlocks.append(&"reactor_wing")
+	for d in [d1, d2, d3, d4, d5]:
 		var slab := MeshInstance3D.new()
 		var bm := BoxMesh.new()
 		bm.size = Vector3(2, 3.0, 0.3)
@@ -449,18 +549,15 @@ func _kit() -> void:
 		slab.name = "Slab"
 		d.get_node("Blocker").add_child(slab)
 		_own(slab)
-	# wall buy: Sentinel .45 on the west wall of the lab
 	var wb := _inst("res://mapkit/wall_buy.tscn", "WallBuy_Sentinel", Vector3(-9.4, 0, 8), PI / 2.0)
 	wb.weapon_id = &"sentinel_45"
 	_deco("Sentinel_Board", -9.8, 6.8, -9.55, 9.2, 1.0, 2.0, "board")
 	_deco("Sentinel_Gun", -9.55, 7.7, -9.45, 8.3, 1.45, 1.65, "vent")
-	# suds machines
 	var suds := {"B": ["snapback_fizz", Vector3(22, 0, 0.6), 0.0], "C": ["grape_bulwark", Vector3(22, 0, 39.4), PI],
 		"D": ["second_wind_root_beer", Vector3(-6, 0, 24.6), 0.0], "E": ["overclock_orange", Vector3(-9.4, 0, 55), PI / 2.0]}
 	for k in suds:
 		var sm := _inst("res://mapkit/suds_machine.tscn", "Suds_" + k, suds[k][1], suds[k][2])
 		sm.suds = load("res://content/suds/%s.tres" % suds[k][0])
-	# crates, power switch, refit
 	var c1 := _inst("res://mapkit/crate_spot.tscn", "Crate_B", Vector3(37, 0, 8), -PI / 2.0)
 	c1.active = true
 	_inst("res://mapkit/crate_spot.tscn", "Crate_C", Vector3(37, 0, 32), -PI / 2.0)

@@ -12,6 +12,7 @@ const SHOTS := [
 	["06_reactor_wing", Vector3(8.5, 2.4, 38.5), Vector3(-2, 1.5, 30), false, 75.0],
 	["07_suds_closeup", Vector3(-5.2, 1.6, 28.5), Vector3(-6, 1.3, 24.6), false, 60.0],
 	["08_refit_chamber", Vector3(0, 2.4, 49.5), Vector3(0, 1.0, 59), false, 75.0],
+	["09_loop_route", Vector3(3.5, 2.2, 11.5), Vector3(0, 1.4, 24), false, 75.0],
 ]
 
 func _ready() -> void:
