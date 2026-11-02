@@ -78,9 +78,9 @@ func _game() -> void:
 	# stand in front of a wall buy (prompt)
 	var wb: WallBuy = null
 	for it in get_tree().get_nodes_in_group(&"interactables"):
-		if it is WallBuy and not it.weapon_id in [&"sentinel_45", &"hornet"] and (wb == null or it.name < wb.name):
+		if it is WallBuy and (wb == null or it.name < wb.name):
 			wb = it
-	game.svc.set_weapon(1, &"hornet")                      # a gun that is not the wall buy's, so the prompt offers a purchase
+	game.svc.kit_for(1).slots[0] = WeaponState.new(Content.weapon(&"hornet"))   # not the wall buy's gun, so the prompt offers a purchase
 	var fwd := wb.global_transform.basis.z
 	var pos := wb.global_position + fwd * 1.3
 	pos.y = me.position.y
