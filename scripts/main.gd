@@ -8,6 +8,9 @@ func _ready() -> void:
 		if a == "--test=move":
 			add_child(load("res://tests/net/net_move.gd").new())
 			return
+		if a == "--test=shoot":
+			add_child(load("res://tests/net/net_shoot.gd").new())
+			return
 	var label := Label.new()
 	label.text = "Site 62"
 	add_child(label)

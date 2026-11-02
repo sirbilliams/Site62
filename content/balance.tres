@@ -28,3 +28,6 @@ crouch_speed = 2.2
 jump_speed = 4.8
 gravity = 14.0
 max_alive = 40
+headshot_mult = 2.0
+shot_origin_tolerance = 2.5
+max_shot_range = 100.0

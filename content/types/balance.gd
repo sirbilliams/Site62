@@ -25,3 +25,6 @@ extends Resource
 @export var jump_speed: float = 4.8
 @export var gravity: float = 14.0
 @export var max_alive: int = 40
+@export var headshot_mult: float = 2.0
+@export var shot_origin_tolerance: float = 2.5
+@export var max_shot_range: float = 100.0

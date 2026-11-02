@@ -20,3 +20,9 @@ renderer/rendering_method="forward_plus"
 
 Content="*res://content/content_db.gd"
 Net="*res://net/net_session.gd"
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="players"
+3d_physics/layer_3="hitbox"

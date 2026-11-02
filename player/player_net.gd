@@ -14,6 +14,8 @@ const PLAYER_SCENE := preload("res://player/player.tscn")
 var players := {}                # peer id -> Player
 var spawn := Vector3(0, 0.2, 0)
 var input_source := Callable()   # () -> InputFrame (move/buttons/look); default samples the keyboard
+var local_buttons := 0           # buttons of the last local frame (weapon service reads FIRE/RELOAD)
+var clock := ClockSync.new()     # host: per-peer client clock model
 var _seq := 0
 var _recent: Array = []          # last BATCH sent frames as arrays
 var _last_seq := {}              # host: peer id -> last applied seq
@@ -38,6 +40,8 @@ func _sample_keyboard() -> InputFrame:
 	if Input.is_key_pressed(KEY_SPACE): f.buttons |= InputFrame.JUMP
 	if Input.is_key_pressed(KEY_SHIFT): f.buttons |= InputFrame.SPRINT
 	if Input.is_key_pressed(KEY_CTRL): f.buttons |= InputFrame.CROUCH
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT): f.buttons |= InputFrame.FIRE
+	if Input.is_key_pressed(KEY_R): f.buttons |= InputFrame.RELOAD
 	f.look_yaw = _yaw
 	f.look_pitch = _pitch
 	return f
@@ -70,6 +74,7 @@ func _sync_roster() -> void:
 			players.erase(id)
 			_last_seq.erase(id)
 			_credit.erase(id)
+			clock.forget(id)
 
 func local_player() -> Player:
 	return players.get(Net.local_id())
@@ -92,6 +97,7 @@ func _local_tick(me: Player) -> void:
 	f.seq = _seq
 	_seq += 1
 	f.t = Time.get_ticks_msec() / 1000.0
+	local_buttons = f.buttons
 	if Net.is_host():
 		me.simulate(f, _space(), DT, false)
 		return
@@ -129,6 +135,7 @@ func _apply_batch(id: int, batch: Array) -> int:
 			break                    # excess is dropped, never queued
 		credit -= 1.0
 		p.simulate(f, _space(), DT, false)
+		clock.observe(id, f.t, Time.get_ticks_msec() / 1000.0)
 		last = f.seq
 		applied += 1
 	_last_seq[id] = last
