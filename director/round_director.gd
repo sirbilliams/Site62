@@ -41,7 +41,7 @@ func tick(dt: float) -> void:
 	_time += dt
 	
 	if _break_deadline > 0:
-		if _time >= _break_deadline:
+		if _time > _break_deadline:
 			_break_deadline = -1.0
 			_start_round(round + 1)
 		return
