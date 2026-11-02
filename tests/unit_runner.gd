@@ -16,20 +16,28 @@ func _init() -> void:
 	files.sort()
 	for f in files:
 		var script: GDScript = load("res://tests/unit/" + f)
+		if script == null:
+			failed += 1
+			print("UNIT FAIL %s: load error" % f)
+			continue
 		var methods: Array[String] = []
 		for m in script.get_script_method_list():
 			if String(m.name).begins_with("test_"):
 				methods.append(m.name)
 		methods.sort()
-		for name in methods:
+		for method in methods:
 			var inst = script.new()
-			inst.call(name)
+			inst.call(method)
 			if inst.failures.is_empty():
 				passed += 1
 			else:
 				failed += 1
 				for msg in inst.failures:
-					print("UNIT FAIL %s::%s: %s" % [f, name, msg])
+					print("UNIT FAIL %s::%s: %s" % [f, method, msg])
+	if passed + failed == 0:
+		print("UNIT FAIL no tests matched")
+		quit(1)
+		return
 	if failed == 0:
 		print("UNIT PASS %d" % passed)
 	quit(0 if failed == 0 else 1)
