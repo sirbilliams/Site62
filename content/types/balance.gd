@@ -28,3 +28,5 @@ extends Resource
 @export var headshot_mult: float = 2.0
 @export var shot_origin_tolerance: float = 2.5
 @export var max_shot_range: float = 100.0
+@export var barricade_boards: int = 6
+@export var repath_s: float = 0.5

@@ -31,3 +31,5 @@ max_alive = 40
 headshot_mult = 2.0
 shot_origin_tolerance = 2.5
 max_shot_range = 100.0
+barricade_boards = 6
+repath_s = 0.5
