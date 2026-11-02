@@ -100,7 +100,6 @@ func set_weapon(peer: int, weapon_id: StringName) -> bool:
 	_sync_recoil()
 	return true
 
-## Isotope Refit for the held gun of `peer`.
 ## Host: a downed player keeps only the sidearm (slot 0) in hand.
 func force_sidearm(peer: int) -> void:
 	var k := kit_for(peer)
@@ -121,6 +120,7 @@ func reset_kit(peer: int) -> void:
 func _may_fire(p: Player) -> bool:
 	return p.state == Player.ALIVE or (p.state == Player.DOWN and kit_for(p.peer_id).held == 0)
 
+## Isotope Refit for the held gun of `peer`.
 func refit_held(peer: int) -> bool:
 	if not kit_for(peer).refit_held():
 		return false

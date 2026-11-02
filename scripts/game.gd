@@ -75,15 +75,15 @@ func _rx_power(on) -> void:
 
 # ---------------------------------------------------------------- suds (host decides, everyone mirrors)
 
-## Host: drop every Suds of `peer` (death, new run) and tell everyone. `p` (that peer's Player, if the host has it)
-## gets its hp clamped to the base ceiling again.
-func clear_suds(peer: int, p: Player = null) -> void:
+## Host: drop every Suds of `peer` (death, new run) except those giving an effect in `keep`, and tell everyone.
+## `p` (that peer's Player, if the host has it) gets its hp clamped to the new ceiling.
+func clear_suds(peer: int, p: Player = null, keep: Array = []) -> void:
 	if not Net.is_host():
 		return
-	_apply_clear(peer)
+	_apply_clear(peer, keep)
 	if p != null:
 		p.hp = minf(p.hp, p.max_health())
-	Net.send_reliable(self, &"_rx_clear_suds", 0, [peer])
+	Net.send_reliable(self, &"_rx_clear_suds", 0, [peer, keep.map(func(e): return String(e))])
 
 ## Host: a Suds effect is used up (the solo self revive) and everyone mirrors it.
 func consume_effect(peer: int, effect: StringName, p: Player = null) -> void:
@@ -104,16 +104,22 @@ func _rx_consume_suds(peer, effect) -> void:
 		return
 	_apply_consume(peer, StringName(effect))
 
-func _apply_clear(peer: int) -> void:
+func _apply_clear(peer: int, keep: Array = []) -> void:
 	if _suds.has(peer) and suds_of(peer).count() > 0:
-		_suds[peer] = SudsEffects.new()
-		suds_changed.emit(peer)
+		var before := suds_of(peer).count()
+		suds_of(peer).clear_except(keep)
+		if suds_of(peer).count() != before:
+			suds_changed.emit(peer)
 
 @rpc("authority", "reliable")
-func _rx_clear_suds(peer) -> void:
-	if Net.is_host() or typeof(peer) != TYPE_INT:
+func _rx_clear_suds(peer, keep = []) -> void:
+	if Net.is_host() or typeof(peer) != TYPE_INT or typeof(keep) != TYPE_ARRAY:
 		return
-	_apply_clear(peer)
+	var k: Array = []
+	for e in keep:
+		if typeof(e) == TYPE_STRING and Content.SUDS_EFFECTS.has(StringName(e)):
+			k.append(StringName(e))
+	_apply_clear(peer, k)
 
 ## Host: record a bought Suds and tell everyone. False if the player already has it.
 func grant_suds(peer: int, s: SudsData) -> bool:

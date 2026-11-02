@@ -119,7 +119,8 @@ func _go_down(id: int, p: Player) -> void:
 	_down_t[id] = 0.0
 	_rev.erase(id)
 	_count(id, "downs")
-	Game.clear_suds(id, p)
+	# alone, the revive Suds survives so the solo self revive can use it; in a team every Suds is dropped
+	Game.clear_suds(id, p, [&"revive"] if _ids().size() == 1 else [])
 	p.hp = 0.0
 	if weapons != null:
 		weapons.force_sidearm(id)
@@ -241,7 +242,7 @@ func _stat(id: int) -> Dictionary:
 	return stats[id]
 
 func _count(id: int, key: String) -> void:
-	if net != null and Net.is_host() and net.players.has(id) and Net.players.has(id):
+	if net != null and Net.is_host() and net.players.has(id):
 		_stat(id)[key] += 1
 
 @rpc("authority", "reliable")

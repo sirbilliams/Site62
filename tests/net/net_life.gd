@@ -150,12 +150,13 @@ func _script() -> void:
 	print("LIFE step 1")
 	# 1: a goes down with a Suds and a second gun
 	Game.grant_suds(a, Content.suds[&"grape_bulwark"])
+	Game.grant_suds(a, Content.suds[&"second_wind_root_beer"])    # in a team the revive Suds is dropped too
 	svc.set_weapon(a, &"hornet")
 	svc.set_weapon(b, &"hornet")
 	await _wait(1.0)
 	var r := await _report()
 	if done: return
-	if not _all(r, "suds_a", func(v): return v == 1, "a has the Suds before"): return
+	if not _all(r, "suds_a", func(v): return v == 2, "a has both Suds before"): return
 	pa.hp = 0.0
 	await _wait(1.5)
 	if not _ck(pa.state == Player.DOWN and ms.stats[a].downs == 1, "host: a DOWN"): return
@@ -274,6 +275,23 @@ func _script() -> void:
 	ph.hp = 0.0
 	await _wait(0.5)
 	if not _ck(ms.game_over and over_signals == 1 and ms.final_stats.size() == 1, "last player down ends the game"): return
+	print("LIFE step 7")
+	# 7: solo with Second Wind: the revive Suds survives going down, self revive after revive_hold_s, Suds used up
+	ms.reset()
+	ph.state = Player.ALIVE
+	ph.hp = 100.0
+	over_signals = 0
+	Game.grant_suds(1, Content.suds[&"grape_bulwark"])
+	Game.grant_suds(1, Content.suds[&"second_wind_root_beer"])
+	ph.hp = 0.0
+	await _wait(1.0)
+	if not _ck(ph.state == Player.DOWN and not ms.game_over, "solo with Second Wind: down, no game over"): return
+	if not _ck(Game.suds_of(1).has(&"second_wind_root_beer") and not Game.suds_of(1).has(&"grape_bulwark"), "only the revive Suds kept"): return
+	var t1 := t
+	if not await _wait_until(func(): return ph.state == Player.ALIVE, 6.0):
+		_fail("solo self revive never happened")
+		return
+	if not _ck(t - t1 > 2.0 and t - t1 < 4.5 and Game.suds_of(1).count() == 0 and not ms.game_over and over_signals == 0, "self revive: %.1f s, suds %d" % [t - t1, Game.suds_of(1).count()]): return
 	print("LIFE NET PASS")
 	done = true
 	get_tree().quit(0)

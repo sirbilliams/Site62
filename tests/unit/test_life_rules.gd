@@ -52,3 +52,13 @@ func test_downed_crawls_dead_stays() -> void:
 	p.state = Player.DEAD
 	assert_eq(p._motor_frame(f).move, Vector2.ZERO, "dead does not move")
 	p.free()
+
+func test_clear_except_keeps_revive() -> void:
+	var e := SudsEffects.new()
+	e.add(Content.suds[&"grape_bulwark"])
+	e.add(Content.suds[&"second_wind_root_beer"])
+	e.clear_except([&"revive"])
+	assert_eq(e.count(), 1, "only revive left")
+	assert_true(e.can_self_revive(true), "still self-revivable")
+	e.clear_except([])
+	assert_eq(e.count(), 0, "all gone")

@@ -24,6 +24,12 @@ func remove_effect(effect: StringName) -> Array:
 			_owned.erase(k)
 	return gone
 
+## Drop every Suds whose effect is not in `keep`.
+func clear_except(keep: Array) -> void:
+	for k in _owned.keys():
+		if not keep.has(_owned[k].effect):
+			_owned.erase(k)
+
 func has(id: StringName) -> bool:
 	return _owned.has(id)
 
