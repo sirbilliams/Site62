@@ -8,6 +8,9 @@ func _ready() -> void:
 		if a == "--test=move":
 			add_child(load("res://tests/net/net_move.gd").new())
 			return
+		if a == "--test=economy":
+			add_child(load("res://tests/net/net_economy.gd").new())
+			return
 		if a == "--test=zombie":
 			add_child(load("res://tests/net/net_zombie.gd").new())
 			return
