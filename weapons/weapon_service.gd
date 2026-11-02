@@ -246,7 +246,7 @@ func fire_local(dir: Vector3) -> bool:
 		return false
 	var t := now_s()
 	var st := state_for(Net.local_id())
-	if kit_for(Net.local_id()).swap_blocked(t) or not st.fire(t, rate_mult_of(Net.local_id())):
+	if not _predict_fire(t):
 		return false
 	var origin := eye_of(me)
 	var seq := _peek_seq(Net.local_id()) if Net.is_host() else _shot_seq
@@ -275,6 +275,11 @@ func fire_local(dir: Vector3) -> bool:
 		_inflight_slots.append(kit_for(Net.local_id()).held)
 		Net.send_reliable(self, &"request_fire", 1, [Net.local_id(), origin, dir, t, seq])
 	return true
+
+## Local prediction gate: not mid-swap, and the held gun's state (rate incl. Suds) lets it fire at `t`. Consumes a round.
+func _predict_fire(t: float) -> bool:
+	var me := Net.local_id()
+	return not kit_for(me).swap_blocked(t) and state_for(me).fire(t, rate_mult_of(me))
 
 ## Swap to the other gun (predicted at once; the host's kit message confirms).
 func swap_local() -> bool:
@@ -445,7 +450,11 @@ func request_reload() -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	if sender == 0 or not _take_token(sender) or not net.players.has(sender):
 		return
-	state_for(sender).start_reload(now_s(), reload_speed_of(sender))
+	_start_reload_for(sender)
+
+## Host: begin the reload of `peer`'s held gun; the Suds make it faster.
+func _start_reload_for(peer: int) -> bool:
+	return state_for(peer).start_reload(now_s(), reload_speed_of(peer))
 
 func _peek_seq(peer: int) -> int:
 	return _counters.get(peer, 0)

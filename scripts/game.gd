@@ -24,7 +24,8 @@ func forget_peer(peer: int) -> void:
 
 ## Back to a fresh match (tests, new run).
 func reset() -> void:
-	power = false
+	rng.randomize()
+	_apply_power(false)
 	_suds.clear()
 	vouchers.clear()
 
@@ -73,6 +74,27 @@ func _rx_power(on) -> void:
 	_apply_power(on)
 
 # ---------------------------------------------------------------- suds (host decides, everyone mirrors)
+
+## Host: drop every Suds of `peer` (death, new run) and tell everyone. `p` (that peer's Player, if the host has it)
+## gets its hp clamped to the base ceiling again.
+func clear_suds(peer: int, p: Player = null) -> void:
+	if not Net.is_host():
+		return
+	_apply_clear(peer)
+	if p != null:
+		p.hp = minf(p.hp, p.max_health())
+	Net.send_reliable(self, &"_rx_clear_suds", 0, [peer])
+
+func _apply_clear(peer: int) -> void:
+	if _suds.has(peer) and suds_of(peer).count() > 0:
+		_suds[peer] = SudsEffects.new()
+		suds_changed.emit(peer)
+
+@rpc("authority", "reliable")
+func _rx_clear_suds(peer) -> void:
+	if Net.is_host() or typeof(peer) != TYPE_INT:
+		return
+	_apply_clear(peer)
 
 ## Host: record a bought Suds and tell everyone. False if the player already has it.
 func grant_suds(peer: int, s: SudsData) -> bool:

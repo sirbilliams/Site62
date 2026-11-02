@@ -270,6 +270,16 @@ func _script() -> void:
 	if not _ck(_points("a") == before - 5000 and r.a.denied == "no_refit" and String(svc.state_for(a).data.id) == held_now, "second refit not refused %s" % str(r.a)):
 		return
 	print("MACHINES refit OK")
+	Game.clear_suds(a, pa)
+	await _wait(SETTLE)
+	r = await _report()
+	if done: return
+	for k in ["a", "b"]:
+		if not _ck(r[k].suds.is_empty() and r[k].max_hp == 100.0, "%s still sees suds after clear %s" % [k, str(r[k])]):
+			return
+	if not _ck(pa.hp <= 100.0 and pa.max_health() == 100.0, "host hp after clear %f" % pa.hp):
+		return
+	print("MACHINES clear_suds OK")
 	await _wait(1.0)
 	print("MACHINES NET PASS")
 	done = true
