@@ -100,6 +100,20 @@ func set_weapon(peer: int, weapon_id: StringName) -> bool:
 	_sync_recoil()
 	return true
 
+## Isotope Refit for the held gun of `peer`.
+func refit_held(peer: int) -> bool:
+	if not kit_for(peer).refit_held():
+		return false
+	_sync_recoil()
+	return true
+
+## Ethereal-Suds multipliers of `peer` (same on every peer: Game mirrors them).
+static func rate_mult_of(peer: int) -> float:
+	return Game.suds_of(peer).fire_rate_mult()
+
+static func reload_speed_of(peer: int) -> float:
+	return 1.0 / maxf(Game.suds_of(peer).reload_mult(), 0.01)
+
 func kit_for(peer: int) -> Inventory:
 	if not kits.has(peer):
 		kits[peer] = Inventory.new(Content.weapon(DEFAULT_WEAPON))
@@ -232,7 +246,7 @@ func fire_local(dir: Vector3) -> bool:
 		return false
 	var t := now_s()
 	var st := state_for(Net.local_id())
-	if kit_for(Net.local_id()).swap_blocked(t) or not st.fire(t):
+	if kit_for(Net.local_id()).swap_blocked(t) or not st.fire(t, rate_mult_of(Net.local_id())):
 		return false
 	var origin := eye_of(me)
 	var seq := _peek_seq(Net.local_id()) if Net.is_host() else _shot_seq
@@ -296,7 +310,7 @@ func grenade_local() -> void:
 
 func reload_local() -> void:
 	var st := state_for(Net.local_id())
-	if st.start_reload(now_s()) and not Net.is_host():
+	if st.start_reload(now_s(), reload_speed_of(Net.local_id())) and not Net.is_host():
 		Net.send_reliable(self, &"request_reload", 1, [])
 
 @rpc("authority", "unreliable")
@@ -431,7 +445,7 @@ func request_reload() -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	if sender == 0 or not _take_token(sender) or not net.players.has(sender):
 		return
-	state_for(sender).start_reload(now_s())
+	state_for(sender).start_reload(now_s(), reload_speed_of(sender))
 
 func _peek_seq(peer: int) -> int:
 	return _counters.get(peer, 0)
@@ -487,7 +501,7 @@ func handle_fire(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: fl
 	if kit_for(shooter).swap_blocked(now, balance().swap_s * SWAP_TOL):
 		_reject(sender, &"swap", t)
 		return
-	var mult := 1.0 + balance().fire_rate_tolerance
+	var mult := (1.0 + balance().fire_rate_tolerance) * rate_mult_of(shooter)
 	var ws := state_for(shooter)
 	var reason := ws.block_reason(_fire_clock(sender, t, now), mult)
 	if reason != &"":

@@ -20,6 +20,7 @@ renderer/rendering_method="forward_plus"
 
 Content="*res://content/content_db.gd"
 Net="*res://net/net_session.gd"
+Game="*res://scripts/game.gd"
 
 [layer_names]
 

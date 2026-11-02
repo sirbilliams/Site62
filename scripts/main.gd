@@ -20,6 +20,9 @@ func _ready() -> void:
 		if a == "--test=match":
 			add_child(load("res://tests/net/net_match.gd").new())
 			return
+		if a == "--test=machines":
+			add_child(load("res://tests/net/net_machines.gd").new())
+			return
 		if a == "--test=shoot":
 			add_child(load("res://tests/net/net_shoot.gd").new())
 			return

@@ -28,6 +28,10 @@ var _offset := Vector3.ZERO      # visual smoothing, decays over SMOOTH_S
 var _buf: Array = []             # [recv_msec, pos, yaw]
 var camera: Camera3D
 
+## hp ceiling: the base, raised by Grape Bulwark.
+func max_health() -> float:
+	return Game.max_hp_of(peer_id, balance.player_hp if balance != null else 100.0)
+
 func setup(id: int, bal: Balance, local: bool) -> void:
 	peer_id = id
 	balance = bal

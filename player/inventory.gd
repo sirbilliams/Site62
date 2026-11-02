@@ -41,6 +41,15 @@ func give(data: WeaponData) -> int:
 	held = i
 	return i
 
+## Isotope Refit: the held gun becomes its upgraded twin with a full magazine. False (nothing changes) if the held
+## gun has no refit (already refitted) or the kit already holds that twin.
+func refit_held() -> bool:
+	var cur := held_state()
+	if cur == null or cur.data.refit == null or has_weapon(cur.data.refit.id):
+		return false
+	slots[held] = WeaponState.new(cur.data.refit)
+	return true
+
 func swap_blocked(now: float, tolerance := 0.0) -> bool:
 	return now < swap_until - tolerance
 
