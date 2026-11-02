@@ -17,6 +17,9 @@ func _ready() -> void:
 		if a == "--test=kit":
 			add_child(load("res://tests/net/net_kit.gd").new())
 			return
+		if a == "--test=match":
+			add_child(load("res://tests/net/net_match.gd").new())
+			return
 		if a == "--test=shoot":
 			add_child(load("res://tests/net/net_shoot.gd").new())
 			return
