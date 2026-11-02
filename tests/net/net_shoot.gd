@@ -123,11 +123,11 @@ func _host_check() -> void:
 	if hits.any(func(h): return h[0] == 1):
 		_fail("host shot attributed to wrong shooter")
 		return
-	if absf(body[0][2] - 28.0) > 0.01:
-		_fail("body damage %.2f != 28" % body[0][2])
+	if absf(body[0][2] - 30.0) > 0.01:
+		_fail("body damage %.2f != 30" % body[0][2])
 		return
-	if absf(head[0][2] - 56.0) > 0.01:
-		_fail("head damage %.2f != 56" % head[0][2])
+	if absf(head[0][2] - 60.0) > 0.01:
+		_fail("head damage %.2f != 60" % head[0][2])
 		return
 	if rtt_ms >= 100.0 and body_live_gap < 0.3:
 		_fail("lag compensation not exercised: live/rewound gap only %.2f m" % body_live_gap)

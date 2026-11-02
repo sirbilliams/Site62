@@ -19,6 +19,7 @@ const PING_EVERY := 30                   # physics ticks
 const BUCKET_MAX := 12.0                 # request flood limit per peer (burst)
 const BUCKET_REFILL := 30.0              # requests per second
 const SKIN := 0.05
+const MAX_PELLETS := 16                 # host cap on WeaponData.pellets (data is trusted, but never trace more than this)
 const AMMO_SYNC_EVERY := 30             # physics ticks (0.5 s)
 const BASE_FOV := 75.0                    # default; the player setting is Settings.fov
 const FOV_RATE := 14.0
@@ -280,19 +281,24 @@ func fire_local(dir: Vector3) -> bool:
 	var origin := eye_of(me)
 	var seq := _peek_seq(Net.local_id()) if Net.is_host() else _shot_seq
 	var ads := (net.local_buttons & InputFrame.ADS) != 0
-	var aim := Spread.offset_dir(dir, Spread.cone_deg(st.data, ads), Net.local_id(), seq)
-	var end := origin + aim * balance().max_shot_range
+	var cone := Spread.cone_deg(st.data, ads)
 	var space := get_world_3d().direct_space_state
-	var q := PhysicsRayQueryParameters3D.create(origin, end, 1 | HitTarget.LAYER_HITBOX)
-	var r := space.intersect_ray(q)
-	if not r.is_empty():
-		end = r.position
-	view.muzzle_flash(origin + aim * 0.6)
-	view.tracer(origin + aim * 0.6, end)
-	if not r.is_empty() and r.collider is StaticBody3D and (r.collider as Node).has_meta(&"target_id"):
-		var tgt = targets.get((r.collider as Node).get_meta(&"target_id"))
-		var head: bool = tgt != null and tgt.is_head_shape(r.shape)
-		view.predicted_marker(t, r.position, head)
+	var marked := false
+	for i in clampi(st.data.pellets, 1, MAX_PELLETS):
+		var aim := Spread.pellet_dir(dir, cone, Net.local_id(), seq, i)
+		var end := origin + aim * balance().max_shot_range
+		var q := PhysicsRayQueryParameters3D.create(origin, end, 1 | HitTarget.LAYER_HITBOX)
+		var r := space.intersect_ray(q)
+		if not r.is_empty():
+			end = r.position
+		if i == 0:
+			view.muzzle_flash(origin + aim * 0.6)
+		view.tracer(origin + aim * 0.6, end)
+		if not marked and not r.is_empty() and r.collider is StaticBody3D and (r.collider as Node).has_meta(&"target_id"):
+			var tgt = targets.get((r.collider as Node).get_meta(&"target_id"))
+			var head: bool = tgt != null and tgt.is_head_shape(r.shape)
+			view.predicted_marker(t, r.position, head)
+			marked = true
 	if recoil != null:
 		var k := recoil.kick(t)
 		net.add_look(deg_to_rad(k.x), deg_to_rad(k.y))
@@ -556,8 +562,7 @@ func handle_fire(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: fl
 		return
 	ws.fire(_fire_clock(sender, t, now), mult)
 	var ads: bool = ((net.local_buttons if sender == Net.local_id() else net.last_buttons.get(sender, 0)) & InputFrame.ADS) != 0
-	dir = Spread.offset_dir(dir, Spread.cone_deg(ws.data, ads), sender, seq)
-	_trace(sender, shooter, origin, dir, t, st_time, ws)
+	_trace(sender, shooter, origin, dir, t, st_time, ws, Spread.cone_deg(ws.data, ads), seq)
 
 ## Clock used for the rate limiter: the shooter's own stamp mapped to host time, so network
 ## jitter on arrival cannot make an honest shooter look fast or slow.
@@ -588,22 +593,36 @@ func pick_target(origin: Vector3, dir: Vector3, st_time: float) -> Dictionary:
 			out = {"found": true, "t": h.t, "id": id, "head": h.head}
 	return out
 
-func _trace(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float, st_time: float, ws: WeaponState) -> void:
-	var pick := pick_target(origin, dir, st_time)
-	var best_t: float = pick.t
-	var best_id: int = pick.id
-	var found: bool = pick.found
-	var best_head: bool = pick.head
-	if not found:
-		_reply(sender, t, MISS, &"", 0, 0.0, false)
-		return
-	if _wall_dist(origin, dir) < best_t - SKIN:
+## One shot = `ws.data.pellets` rays (each its own seeded spread). Every pellet is traced, wall-checked and damaged by
+## the host; the shooter gets ONE verdict: HIT (summed damage, the hardest-hitting pellet's target) / MISS / REJECTED (los).
+func _trace(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float, st_time: float, ws: WeaponState, cone: float, seq: int) -> void:
+	var total := 0.0
+	var top_id := 0
+	var top_dmg := -1.0
+	var any_head := false
+	var blocked := false
+	for i in clampi(ws.data.pellets, 1, MAX_PELLETS):
+		var pd := Spread.pellet_dir(dir, cone, sender, seq, i)
+		var pick := pick_target(origin, pd, st_time)
+		if not pick.found:
+			continue
+		if _wall_dist(origin, pd) < pick.t - SKIN:
+			blocked = true
+			continue
+		var dmg := ws.damage_at(pick.t) * (balance().headshot_mult if pick.head else 1.0)
+		last_rewind = {"id": pick.id, "time": st_time, "now": now_s()}
+		hit.emit(shooter, pick.id, dmg, pick.head)
+		total += dmg
+		any_head = any_head or pick.head
+		if dmg > top_dmg:
+			top_dmg = dmg
+			top_id = pick.id
+	if top_id != 0:
+		_reply(sender, t, HIT, &"", top_id, total, any_head)
+	elif blocked:
 		_reject(sender, &"los", t)
-		return
-	var dmg := ws.damage_at(best_t) * (balance().headshot_mult if best_head else 1.0)
-	last_rewind = {"id": best_id, "time": st_time, "now": now_s()}
-	hit.emit(shooter, best_id, dmg, best_head)
-	_reply(sender, t, HIT, &"", best_id, dmg, best_head)
+	else:
+		_reply(sender, t, MISS, &"", 0, 0.0, false)
 
 # ---------------------------------------------------------------- swap / melee / grenade (host)
 

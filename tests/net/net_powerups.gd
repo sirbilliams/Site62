@@ -2,11 +2,11 @@ extends Node3D
 ## Multi-process power-ups test (--rtt_ms/--loss on every process). Roles: host | a | b.
 ## Host scripts the steps; both clients report what THEY see.
 ##  0. A far-away pickup is visible on every peer and despawns after 25 s everywhere.
-##  1. double_points: collected by walking onto it; kill-less points are doubled; pickup gone for everyone.
-##  2. max_ammo: emptied mags are full again on host and clients.
-##  3. purge: every zombie dies on all peers, +400 (doubled) each, no kill points, no drops even at 100 % chance.
+##  1. bonus_ration: collected by walking onto it; kill-less points are doubled; pickup gone for everyone.
+##  2. resupply: emptied mags are full again on host and clients.
+##  3. purge: every zombie dies on all peers, +350 (doubled) each, no kill points, no drops even at 100 % chance.
 ##  4. overload: a 1-damage hit kills a zombie. 5. fortify: barricade back to 6 on all peers. 6. voucher: both players.
-##  7. Timed effects (double_points, overload) are over 30 s after their pickup, on every peer.
+##  7. Timed effects (bonus_ration, overload) are over 25 s after their pickup, on every peer.
 ## Host prints POWERUPS NET PASS; each client prints POWERUPS NET CLIENT OK (role) when the host leaves.
 
 const SPAWN := Vector3(0, 0.2, -18)
@@ -147,34 +147,34 @@ func _script() -> void:
 	if done: return
 	if not _ck(pu.pickups.size() == 1, "host far pickup"): return
 	if not _all(r, "pickups", 1, "far pickup visible"): return
-	# 1: double points
+	# 1: bonus ration
 	var t_dbl := t
-	pu.force_drop(&"double_points", apos)
+	pu.force_drop(&"bonus_ration", apos)
 	await _wait(2.0)
-	if not _ck(pu.is_active(&"double_points") and pu.pickups.size() == 1, "host double_points (pickups %d)" % pu.pickups.size()): return
+	if not _ck(pu.is_active(&"bonus_ration") and pu.pickups.size() == 1, "host bonus_ration (pickups %d)" % pu.pickups.size()): return
 	eco.award(a, 10)
 	if not _ck(eco.wallet(a).points == 1020, "doubled award %d" % eco.wallet(a).points): return
 	r = await _report()
 	if done: return
-	if not _all(r, "pickups", 1, "double_points pickup gone (only far one left)"): return
+	if not _all(r, "pickups", 1, "bonus_ration pickup gone (only far one left)"): return
 	for k in ["a", "b"]:
-		if not _ck("double_points" in r[k].active, "%s sees double_points %s" % [k, str(r[k].active)]): return
-	# 2: max ammo
+		if not _ck("bonus_ration" in r[k].active, "%s sees bonus_ration %s" % [k, str(r[k].active)]): return
+	# 2: resupply
 	for p in [a, b]:
 		var st: WeaponState = svc.kit_for(p).held_state()
 		st.mag = 0
 		st.reserve = 0
 		svc.send_kit(p, true)
 	await _wait(1.0)
-	pu.force_drop(&"max_ammo", apos)
+	pu.force_drop(&"resupply", apos)
 	await _wait(2.0)
 	var full: int = svc.kit_for(a).held_state().data.mag
 	for p in [a, b]:
 		var st2: WeaponState = svc.kit_for(p).held_state()
-		if not _ck(st2.mag == full and st2.reserve == st2.data.reserve and full > 0, "host max_ammo peer %d" % p): return
+		if not _ck(st2.mag == full and st2.reserve == st2.data.reserve and full > 0, "host resupply peer %d" % p): return
 	r = await _report()
 	if done: return
-	if not _all(r, "mag", full, "max_ammo mag"): return
+	if not _all(r, "mag", full, "resupply mag"): return
 	# 3: purge (100 % drop chance: purge kills must still not drop)
 	_spawn_zombies(3)
 	await _wait(2.0)
@@ -189,7 +189,7 @@ func _script() -> void:
 	pu.force_drop(&"purge", apos)
 	await _wait(2.5)
 	if not _ck(zs.live_count() == 0, "purge left zombies"): return
-	if not _ck(eco.wallet(a).points == pts_a + 800 and eco.wallet(b).points == pts_b + 800, "purge points a %d b %d (want +800 each, doubled)" % [eco.wallet(a).points - pts_a, eco.wallet(b).points - pts_b]): return
+	if not _ck(eco.wallet(a).points == pts_a + 700 and eco.wallet(b).points == pts_b + 700, "purge points a %d b %d (want +700 each, doubled)" % [eco.wallet(a).points - pts_a, eco.wallet(b).points - pts_b]): return
 	if not _ck(drops_seen == drops_before + 1 and pu.drops_this_round == 0, "purge kills dropped something (%d)" % (drops_seen - drops_before)): return
 	pu.drop_chance = -1.0
 	r = await _report()
@@ -231,11 +231,11 @@ func _script() -> void:
 	r = await _report()
 	if done: return
 	if not _all(r, "pickups", 0, "far pickup despawned"): return
-	# 7: timed effects end 30 s after pickup
-	while t < t_dbl + 32.5:
+	# 7: timed effects end 25 s after pickup
+	while t < t_dbl + 27.5:
 		await _wait(0.5)
-	if not _ck(not pu.is_active(&"double_points"), "host double_points still on"): return
-	while t < t_ov + 32.5:
+	if not _ck(not pu.is_active(&"bonus_ration"), "host bonus_ration still on"): return
+	while t < t_ov + 27.5:
 		await _wait(0.5)
 	if not _ck(not pu.is_active(&"overload"), "host overload still on"): return
 	r = await _report()

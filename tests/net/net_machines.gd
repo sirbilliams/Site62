@@ -2,7 +2,7 @@ extends Node3D
 ## Multi-process machines test (--rtt_ms/--loss on every process). Roles: host | a | b.
 ## Host scripts the steps; client a buys, both clients report what THEY see.
 ##  1. Suds before power: refused. Power on (replicated), buy Suds: effect on host and both clients.
-##  2. All four Suds, a duplicate and a 5th are refused.
+##  2. Three Suds fill the slots (max_suds 3); the fourth Suds, a duplicate and another one are refused.
 ##  3. Six crate rolls: identical on every peer, never a held gun; the crate then moves; a voucher makes a roll free.
 ##  4. Isotope Refit swaps the held gun; a second refit is refused.
 ## Host prints MACHINES NET PASS; each client prints MACHINES NET CLIENT OK (role) when the host leaves.
@@ -188,7 +188,7 @@ func _script() -> void:
 	if not _ck(Game.power and _points("a") == 30000, "power not on / charged"):
 		return
 	await _use("S1")
-	if not _ck(_points("a") == 27500 and Game.suds_of(a).max_hp(100.0) == 220.0 and is_equal_approx(pa.hp, 220.0) and is_equal_approx(pa.max_health(), 220.0), "host suds effect (points %d hp %f)" % [_points("a"), pa.hp]):
+	if not _ck(_points("a") == 27400 and Game.suds_of(a).max_hp(100.0) == 220.0 and is_equal_approx(pa.hp, 220.0) and is_equal_approx(pa.max_health(), 220.0), "host suds effect (points %d hp %f)" % [_points("a"), pa.hp]):
 		return
 	r = await _report()
 	if done: return
@@ -198,15 +198,20 @@ func _script() -> void:
 	if not _ck(is_equal_approx(r.a.hp, 220.0) and is_equal_approx(r.b.a_hp, 220.0), "hp replicated %s" % str(r)):
 		return
 	print("MACHINES power + first suds OK")
-	# 2: the other three, a duplicate, a fifth
-	await _use("S2,S3,S4")
+	# 2: two more (the third slot), the fourth Suds, a duplicate, another one
+	await _use("S2,S3")
 	var fx := Game.suds_of(a)
-	if not _ck(fx.count() == 4 and is_equal_approx(fx.reload_mult(), 0.5) and is_equal_approx(fx.revive_mult(), 0.5) and is_equal_approx(fx.fire_rate_mult(), 1.33), "host stack"):
+	if not _ck(fx.count() == 3 and is_equal_approx(fx.reload_mult(), 0.5) and is_equal_approx(fx.revive_mult(), 0.5) and is_equal_approx(fx.fire_rate_mult(), 1.0), "host stack"):
 		return
-	if not _ck(is_equal_approx(WeaponService.rate_mult_of(a), 1.33) and is_equal_approx(WeaponService.reload_speed_of(a), 2.0), "weapon service multipliers"):
+	if not _ck(is_equal_approx(WeaponService.rate_mult_of(a), 1.0) and is_equal_approx(WeaponService.reload_speed_of(a), 2.0), "weapon service multipliers"):
 		return
-	var spent := 27500 - 3000 - 1500 - 2000
-	if not _ck(_points("a") == spent, "points after four suds %d" % _points("a")):
+	var spent := 27400 - 1800 - 1200
+	if not _ck(_points("a") == spent, "points after three suds %d" % _points("a")):
+		return
+	await _use("S4")
+	r = await _report()
+	if done: return
+	if not _ck(r.a.denied == "max_suds" and _points("a") == spent and not Game.suds_of(a).has(&"overclock_orange"), "fourth Suds not refused %s" % str(r.a)):
 		return
 	await _use("SDup")
 	r = await _report()
@@ -216,11 +221,11 @@ func _script() -> void:
 	await _use("SExtra")
 	r = await _report()
 	if done: return
-	if not _ck(r.a.denied == "max_suds" and r.a.denied_count == 3 and _points("a") == spent and not Game.suds_of(a).has(&"extra_fizz"), "fifth not refused %s" % str(r.a)):
+	if not _ck(r.a.denied == "max_suds" and r.a.denied_count == 4 and _points("a") == spent and not Game.suds_of(a).has(&"extra_fizz"), "extra not refused %s" % str(r.a)):
 		return
 	for k in ["a", "b"]:
 		var d: Dictionary = r[k]
-		if not _ck(d.suds.size() == 4 and is_equal_approx(d.reload, 0.5) and is_equal_approx(d.revive, 0.5) and is_equal_approx(d.rate, 1.33) and d.max_hp == 220.0, "%s stack view %s" % [k, str(d)]):
+		if not _ck(d.suds.size() == 3 and is_equal_approx(d.reload, 0.5) and is_equal_approx(d.revive, 0.5) and is_equal_approx(d.rate, 1.0) and d.max_hp == 220.0, "%s stack view %s" % [k, str(d)]):
 			return
 	print("MACHINES suds stack + refusals OK")
 	# 3: crate
@@ -230,7 +235,7 @@ func _script() -> void:
 		return
 	await _use("C1,C1,C1,C1,C1,C1")
 	await _wait(1.0)
-	if not _ck(rolls.size() == 6 and _points("a") == before - 6 * 950, "host rolls %s points %d" % [str(rolls), _points("a")]):
+	if not _ck(rolls.size() == 6 and _points("a") == before - 6 * 1000, "host rolls %s points %d" % [str(rolls), _points("a")]):
 		return
 	r = await _report()
 	if done: return
@@ -251,23 +256,23 @@ func _script() -> void:
 		return
 	before = _points("a")
 	await _use("C2")
-	if not _ck(_points("a") == before - 950, "crate after voucher not charged"):
+	if not _ck(_points("a") == before - 1000, "crate after voucher not charged"):
 		return
 	# 4: refit
 	before = _points("a")
 	var held_base: String = String(svc.state_for(a).data.id)
 	await _use("Refit")
 	var held_now: String = String(svc.state_for(a).data.id)
-	if not _ck(held_now == held_base + "_refit" and _points("a") == before - 5000, "refit host %s -> %s, points %d" % [held_base, held_now, _points("a")]):
+	if not _ck(held_now == held_base + "_refit" and _points("a") == before - 4500, "refit host %s -> %s, points %d" % [held_base, held_now, _points("a")]):
 		return
 	r = await _report()
 	if done: return
-	if not _ck(r.a.held == held_now and r.a.points == before - 5000, "refit client view %s" % str(r.a)):
+	if not _ck(r.a.held == held_now and r.a.points == before - 4500, "refit client view %s" % str(r.a)):
 		return
 	await _use("Refit")
 	r = await _report()
 	if done: return
-	if not _ck(_points("a") == before - 5000 and r.a.denied == "no_refit" and String(svc.state_for(a).data.id) == held_now, "second refit not refused %s" % str(r.a)):
+	if not _ck(_points("a") == before - 4500 and r.a.denied == "no_refit" and String(svc.state_for(a).data.id) == held_now, "second refit not refused %s" % str(r.a)):
 		return
 	print("MACHINES refit OK")
 	Game.clear_suds(a, pa)

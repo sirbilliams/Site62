@@ -3,7 +3,7 @@ extends Node3D
 ## A dropped power-up: a spinning orb with a label. Pure visual + data; PowerupService (host) decides pickup.
 
 var pid := 0
-var kind: StringName = &"double_points"
+var kind: StringName = &"bonus_ration"
 var life := 25.0               # host: seconds left before it despawns
 
 func _ready() -> void:

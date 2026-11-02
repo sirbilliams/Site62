@@ -41,6 +41,17 @@ func test_validator_empty_recoil() -> void:
 
 func test_balance_values() -> void:
 	var b: Balance = Content.balance
-	assert_eq(b.start_points, 500)
-	assert_eq(b.refit_cost, 5000)
+	assert_eq(b.start_points, 600)
+	assert_eq(b.refit_cost, 4500)
+	assert_eq(b.crate_cost, 1000)
+	assert_eq(b.max_suds, 3)
 	assert_near(b.fire_rate_tolerance, 0.10)
+
+func test_thresher_fires_pellets_and_cathode_carbine_is_crate_only() -> void:
+	var th := Content.weapon(&"thresher")
+	assert_eq(th.pellets, 8)
+	assert_eq(Content.weapon(&"thresher_refit").pellets, 8)
+	assert_eq(Content.weapon(&"sentinel_45").pellets, 1)
+	var cc := Content.weapon(&"cathode_carbine")
+	assert_true(cc != null and not cc.is_wall_buy and cc.cost == 0, "crate-only")
+	assert_true(Content.weapons.size() >= 12, "six guns plus their refits")

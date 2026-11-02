@@ -1,10 +1,10 @@
 extends Node3D
 ## Multi-process economy test (--rtt_ms/--loss on every process). Roles: host | a | b.
 ## Host drives the steps and checks the host-owned state; clients act on command and report what THEY see.
-##  1. A (given 1000) buys the 1000-point wall gun: weapon + points on host and client.
+##  1. A (given to 1100) buys the 1100-point wall gun: weapon + points on host and client.
 ##  2. A buys it again with an empty magazine: ammo at ammo_cost, refilled.
 ##  3. A tries a wall gun from 5 m away: refused, points kept.
-##  4. A and B (1000 each) use the same 750 door at once: one pays, the other is refused and keeps 1000.
+##  4. A and B (1000 each) use the same 800 door at once: one pays, the other is refused and keeps 1000.
 ## Host prints ECONOMY NET PASS; each client prints ECONOMY NET CLIENT OK (role) when the host leaves.
 
 const SETTLE_S := 2.5
@@ -100,7 +100,7 @@ func _build_map() -> void:
 	add_child(zone)
 	door = load("res://mapkit/bulkhead_door.tscn").instantiate()
 	door.name = "Door"
-	door.cost = 750
+	door.cost = 800
 	door.unlocks = [&"lab"]
 	door.position = SPAWN + Vector3(0, -0.2, 1.8)
 	add_child(door)
@@ -136,9 +136,9 @@ func _host_step() -> void:
 	match phase:
 		"wait":
 			if ids.size() == 2 and net.players.size() == 3 and age > 1.5:
-				if not _check(eco.wallet(_peer("a")).points == 500 and eco.wallet(_peer("b")).points == 500, "start points"):
+				if not _check(eco.wallet(_peer("a")).points == 600 and eco.wallet(_peer("b")).points == 600, "start points"):
 					return
-				eco.wallet(_peer("a")).add(500, false)
+				eco.wallet(_peer("a")).add(500, false)             # 600 start + 500 = the 1100 hornet
 				_cmd_to("a", "use_near")
 				_go("s1")
 		"s1":
@@ -146,19 +146,19 @@ func _host_step() -> void:
 				var a := _peer("a")
 				if not (_check(eco.wallet(a).points == 0, "s1 host points %d" % eco.wallet(a).points)
 						and _check(svc.state_for(a).data.id == &"hornet", "s1 host weapon")
-						and _check(purchases == [[a, &"hornet", 1000]], "s1 purchase %s" % str(purchases))):
+						and _check(purchases == [[a, &"hornet", 1100]], "s1 purchase %s" % str(purchases))):
 					return
 				_ask("a", "s1")
 				_go("s1r")
 		"s1r":
 			if reports.has("a") and reports["a"].step == "s1":
 				var r: Dictionary = reports["a"]
-				if not _check(r.points == 0 and r.weapon == "hornet" and r.mag == 32 and r.reserve == 192, "s1 client view %s" % str(r)):
+				if not _check(r.points == 0 and r.weapon == "hornet" and r.mag == 36 and r.reserve == 216, "s1 client view %s" % str(r)):
 					return
 				var a := _peer("a")
 				svc.state_for(a).mag = 1
 				svc.state_for(a).reserve = 0
-				eco.wallet(a).add(500, false)
+				eco.wallet(a).add(440, false)
 				_cmd_to("a", "use_near")
 				_go("s2")
 			elif age > 10.0:
@@ -169,14 +169,14 @@ func _host_step() -> void:
 				var st := svc.state_for(a)
 				if not (_check(eco.wallet(a).points == 0, "s2 ammo cost not taken: %d" % eco.wallet(a).points)
 						and _check(st.mag == st.data.mag and st.reserve == st.data.reserve, "s2 ammo not refilled")
-						and _check(purchases.size() == 2 and purchases[1] == [a, &"ammo_hornet", 500], "s2 purchase %s" % str(purchases))):
+						and _check(purchases.size() == 2 and purchases[1] == [a, &"ammo_hornet", 440], "s2 purchase %s" % str(purchases))):
 					return
 				_ask("a", "s2")
 				_go("s2r")
 		"s2r":
 			if reports.has("a") and reports["a"].step == "s2":
 				var r: Dictionary = reports["a"]
-				if not _check(r.points == 0 and r.weapon == "hornet" and r.mag == 32 and r.reserve == 192, "s2 client view %s" % str(r)):
+				if not _check(r.points == 0 and r.weapon == "hornet" and r.mag == 36 and r.reserve == 216, "s2 client view %s" % str(r)):
 					return
 				eco.wallet(_peer("a")).add(1000, false)
 				_cmd_to("a", "use_far")
@@ -195,7 +195,7 @@ func _host_step() -> void:
 				var r: Dictionary = reports["a"]
 				if not _check(r.denied == "far" and r.denied_count == 1 and r.points == 1000 and r.weapon == "hornet", "s3 client view %s" % str(r)):
 					return
-				eco.wallet(_peer("b")).add(500, false)
+				eco.wallet(_peer("b")).add(400, false)
 				_cmd_to("a", "use_door")
 				_cmd_to("b", "use_door")
 				_go("s4")
@@ -207,10 +207,10 @@ func _host_step() -> void:
 				var pb: int = eco.wallet(b).points
 				var doors := purchases.filter(func(p): return p[1] == &"door")
 				if not (_check(door.is_open and zone.open and door.link.enabled, "s4 door not open on host")
-						and _check(doors.size() == 1 and doors[0][2] == 750, "s4 purchases %s" % str(purchases))
-						and _check((pa == 250 and pb == 1000) or (pa == 1000 and pb == 250), "s4 points a=%d b=%d" % [pa, pb])):
+						and _check(doors.size() == 1 and doors[0][2] == 800, "s4 purchases %s" % str(purchases))
+						and _check((pa == 200 and pb == 1000) or (pa == 1000 and pb == 200), "s4 points a=%d b=%d" % [pa, pb])):
 					return
-				print("ECONOMY door race: %s paid; a=%d b=%d" % ["a" if pa == 250 else "b", pa, pb])
+				print("ECONOMY door race: %s paid; a=%d b=%d" % ["a" if pa == 200 else "b", pa, pb])
 				_ask("a", "s4")
 				_ask("b", "s4")
 				_go("s4r")
@@ -218,11 +218,11 @@ func _host_step() -> void:
 			if reports.has("a") and reports.has("b") and reports["a"].step == "s4" and reports["b"].step == "s4":
 				var ra: Dictionary = reports["a"]
 				var rb: Dictionary = reports["b"]
-				var a_paid: bool = eco.wallet(_peer("a")).points == 250
+				var a_paid: bool = eco.wallet(_peer("a")).points == 200
 				var loser: Dictionary = rb if a_paid else ra
 				var winner: Dictionary = ra if a_paid else rb
 				if not (_check(ra.door and ra.zone and rb.door and rb.zone, "s4 clients do not see the door open: %s %s" % [str(ra), str(rb)])
-						and _check(winner.points == 250 and winner.denied != "already_open", "s4 winner view %s" % str(winner))
+						and _check(winner.points == 200 and winner.denied != "already_open", "s4 winner view %s" % str(winner))
 						and _check(loser.points == 1000 and loser.denied == "already_open", "s4 loser view %s" % str(loser))):
 					return
 				print("ECONOMY NET DOOR OK")

@@ -41,3 +41,13 @@ func test_recoil_recovers() -> void:
 		back += r.recover(1.0 / 60.0)
 	assert_near(back.y, 1.2, 1e-4, "all recovered")
 	assert_eq(r.accum, Vector2.ZERO, "settled")
+
+func test_pellets_first_matches_single_ray_and_rest_differ() -> void:
+	var dir := Vector3(0, 0, -1)
+	assert_true(Spread.pellet_dir(dir, 4.0, 5, 9, 0).is_equal_approx(Spread.offset_dir(dir, 4.0, 5, 9)), "pellet 0 = single ray")
+	var seen := {}
+	for i in 8:
+		var o := Spread.pellet_dir(dir, 4.0, 5, 9, i)
+		assert_true(rad_to_deg(dir.angle_to(o)) <= 4.0 + 1e-3, "pellet %d inside the cone" % i)
+		seen[snapped(o.x, 0.0001)] = true
+	assert_true(seen.size() >= 7, "pellets spread apart")

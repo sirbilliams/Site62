@@ -1,27 +1,27 @@
 class_name Balance
 extends Resource
 
-@export var start_points: int = 500
-@export var pts_hit: int = 10
-@export var pts_kill: int = 60
-@export var pts_headshot_bonus: int = 40
+@export var start_points: int = 600
+@export var pts_hit: int = 5
+@export var pts_kill: int = 50
+@export var pts_headshot_bonus: int = 30
 @export var pts_melee_kill: int = 120
-@export var pts_board: int = 10
+@export var pts_board: int = 15
 @export var board_cap_per_round: int = 400
 @export var player_hp: float = 100.0
 @export var downed_bleedout_s: float = 30.0
 @export var revive_hold_s: float = 4.0
 @export var revive_hp_frac: float = 0.5
 @export var downed_move_mult: float = 0.3
-@export var max_suds: int = 4
+@export var max_suds: int = 3
 @export var powerup_drop_chance: float = 0.03
-@export var powerup_max_per_round: int = 4
-@export var powerup_duration_s: float = 30.0
-@export var pts_purge: int = 400
+@export var powerup_max_per_round: int = 3
+@export var powerup_duration_s: float = 25.0
+@export var pts_purge: int = 350
 @export var powerup_despawn_s: float = 25.0
-@export var crate_cost: int = 950
+@export var crate_cost: int = 1000
 @export var crate_moves_after_uses: int = 6
-@export var refit_cost: int = 5000
+@export var refit_cost: int = 4500
 @export var fire_rate_tolerance: float = 0.10
 @export var walk_speed: float = 4.5
 @export var sprint_speed: float = 6.8

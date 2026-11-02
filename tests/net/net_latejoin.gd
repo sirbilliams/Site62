@@ -225,7 +225,7 @@ func _stage() -> void:
 	Game.give_voucher(a)
 	svc.set_weapon(a, &"hornet")
 	eco.wallet(a).points = 700
-	pu.force_drop(&"max_ammo", Vector3(30, 0.5, 30))
+	pu.force_drop(&"resupply", Vector3(30, 0.5, 30))
 	pu.collect(&"overload", 1)
 	zs.spawn(Vector3(5, 0.2, 5), &"shambler", 100.0, 0)        # a live zombie the joiner must get after `ready`
 	zs.spawn(Vector3(8, 0.2, 5), &"shambler", 100.0, 0)

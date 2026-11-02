@@ -4086,25 +4086,25 @@ unlocks = Array[StringName]([&"cafeteria"])
 [node name="Door_offices" type="Node3D" parent="." unique_id=536715438 instance=ExtResource("32_whwkf")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28, 0, 20)
 script = ExtResource("33_hprhr")
-cost = 1000
+cost = 1100
 unlocks = Array[StringName]([&"offices"])
 
 [node name="Door_reactor" type="Node3D" parent="." unique_id=520959952 instance=ExtResource("32_whwkf")]
 transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 14, 0, 32)
 script = ExtResource("33_hprhr")
-cost = 1250
+cost = 1300
 unlocks = Array[StringName]([&"reactor_wing"])
 
 [node name="Door_refit" type="Node3D" parent="." unique_id=1532966827 instance=ExtResource("32_whwkf")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 44)
 script = ExtResource("33_hprhr")
-cost = 1500
+cost = 1600
 unlocks = Array[StringName]([&"refit_chamber"])
 
 [node name="Door_loop" type="Node3D" parent="." unique_id=37162089 instance=ExtResource("32_whwkf")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 20)
 script = ExtResource("33_hprhr")
-cost = 1250
+cost = 1300
 unlocks = Array[StringName]([&"reactor_wing"])
 
 [node name="WallBuy_Sentinel" type="Node3D" parent="." unique_id=1676865368 instance=ExtResource("34_o3fl4")]

@@ -61,8 +61,8 @@ func test_map_has_required_nodes() -> void:
 		elif n is SudsMachine:
 			assert_true(n.suds != null, "machine has suds")
 	assert_eq(open_ids.keys(), [&"entrance_lab"], "only the start zone is open")
-	assert_eq(costs, {&"cafeteria": 750, &"offices": 1000, &"reactor_wing": 1250, &"refit_chamber": 1500}, "door costs")
-	assert_eq(door_costs[&"Door_loop"], [1250, [&"reactor_wing"] as Array[StringName]], "loop door opens the reactor wing")
+	assert_eq(costs, {&"cafeteria": 800, &"offices": 1100, &"reactor_wing": 1300, &"refit_chamber": 1600}, "door costs")
+	assert_eq(door_costs[&"Door_loop"], [1300, [&"reactor_wing"] as Array[StringName]], "loop door opens the reactor wing")
 	var per := {}
 	var active_crates := 0
 	for n in nodes:

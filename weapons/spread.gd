@@ -6,6 +6,10 @@ extends RefCounted
 static func cone_deg(data: WeaponData, ads: bool) -> float:
 	return data.spread_ads_deg if ads else data.spread_hip_deg
 
+## Pellet `i` of shot `seq`: pellet 0 is the plain single-ray offset, so one-pellet guns are unchanged.
+static func pellet_dir(dir: Vector3, cone_deg: float, shooter: int, seq: int, i: int) -> Vector3:
+	return offset_dir(dir, cone_deg, shooter, seq if i == 0 else hash([seq, i]))
+
 ## `dir` rotated by a seeded offset that stays inside a cone of `cone_deg` half-angle.
 static func offset_dir(dir: Vector3, cone_deg: float, shooter: int, seq: int) -> Vector3:
 	var rng := RandomNumberGenerator.new()

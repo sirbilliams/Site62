@@ -10,15 +10,15 @@ func _init(start := 0, cap := 400) -> void:
 	points = start
 	board_cap = cap
 
-func add(n: int, double_points: bool) -> void:
-	points += n * 2 if double_points else n
+func add(n: int, bonus_ration: bool) -> void:
+	points += n * 2 if bonus_ration else n
 
 ## Points for a board repair, limited by the per-round cap. Returns what was actually awarded (before doubling).
-func add_board(n: int, double_points: bool) -> int:
+func add_board(n: int, bonus_ration: bool) -> int:
 	var allowed := clampi(board_cap - board_points_this_round, 0, n)
 	board_points_this_round += allowed
 	if allowed > 0:
-		add(allowed, double_points)
+		add(allowed, bonus_ration)
 	return allowed
 
 func try_spend(cost: int) -> bool:

@@ -11,10 +11,10 @@ func test_drop_cap_per_round() -> void:
 	s.dropped.connect(func(_k, _p): n[0] += 1)
 	for i in 10:
 		s.on_zombie_died(Vector3(i, 0, 0))
-	assert_eq(n[0], 4, "cap 4 at 100% chance")
+	assert_eq(n[0], 3, "cap 3 at 100% chance")
 	s.new_round()
 	s.on_zombie_died(Vector3.ZERO)
-	assert_eq(n[0], 5, "cap resets next round")
+	assert_eq(n[0], 4, "cap resets next round")
 	s.free()
 
 func test_no_drop_at_zero_chance_or_during_purge() -> void:

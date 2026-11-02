@@ -4,9 +4,9 @@ extends Node
 ## effects); clients mirror pickups (visual) and the timed effects (`active`).
 ##  - A zombie KILL rolls Game.rng against Balance.powerup_drop_chance, at most powerup_max_per_round per round
 ##    (reset on round_started). Purge kills and despawns never drop and do not count toward the cap.
-##  - Timed kinds (double_points, overload; PowerupData.duration_s > 0) last Balance.powerup_duration_s.
-##  - max_ammo refills every kit; purge kills every live zombie (killer 0 = no per-kill points, so no drops either)
-##    and pays every player Balance.pts_purge through the Wallet (double points applies if active);
+##  - Timed kinds (bonus_ration, overload; PowerupData.duration_s > 0) last Balance.powerup_duration_s.
+##  - resupply refills every kit; purge kills every live zombie (killer 0 = no per-kill points, so no drops either)
+##    and pays every player Balance.pts_purge through the Wallet (bonus ration applies if active);
 ##    fortify restores every barricade; voucher gives every player a free next crate.
 ##  - A pickup vanishes after Balance.powerup_despawn_s, or when a player comes within PICKUP_RANGE.
 
@@ -37,7 +37,7 @@ func bind(pn: PlayerNet, zs: ZombieSync, eco: EconomyService, svc: WeaponService
 	zombies = zs
 	economy = eco
 	weapons = svc
-	eco.double_source = func(): return is_active(&"double_points")
+	eco.double_source = func(): return is_active(&"bonus_ration")
 	zs.damage_mod = overload_damage
 	zs.zombie_died.connect(func(_zid, _k, _h, _m, pos): on_zombie_died(pos))
 	if round_source != null:
@@ -150,7 +150,7 @@ func collect(kind: StringName, by: int) -> void:
 		active[kind] = clock + secs
 		Net.send_reliable(self, &"_rx_active", 0, [String(kind), secs])
 	match kind:
-		&"max_ammo": _max_ammo()
+		&"resupply": _resupply()
 		&"purge": _purge()
 		&"fortify": _fortify()
 		&"voucher":
@@ -161,7 +161,7 @@ func collect(kind: StringName, by: int) -> void:
 func _peers() -> Array:
 	return net.players.keys() if net != null else []
 
-func _max_ammo() -> void:
+func _resupply() -> void:
 	if weapons == null:
 		return
 	for id in _peers():

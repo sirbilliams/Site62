@@ -20,7 +20,7 @@ func test_door_opens_and_zone() -> void:
 	var z := Zone.new()
 	z.zone_id = &"lab"
 	var d := BulkheadDoor.new()
-	d.cost = 750
+	d.cost = 800
 	d.unlocks = [&"lab"]
 	e.wallet(1).points = 1000
 	var r := e.handle_use(1, d, Vector3.ZERO)
@@ -28,14 +28,14 @@ func test_door_opens_and_zone() -> void:
 	assert_eq(r, &"", "door bought")
 	assert_true(d.is_open, "open")
 	assert_true(z.open, "zone opened")
-	assert_eq(e.wallet(1).points, 250)
+	assert_eq(e.wallet(1).points, 200)
 	z.free(); d.free()
 	_free(e)
 
 func test_same_frame_door_contention() -> void:
 	var e := _setup()
 	var d := BulkheadDoor.new()
-	d.cost = 750
+	d.cost = 800
 	e.wallet(1).points = 1000
 	e.wallet(2).points = 1000
 	var bought := []
@@ -44,7 +44,7 @@ func test_same_frame_door_contention() -> void:
 	var r2 := e.handle_use(2, d, Vector3.ZERO)
 	assert_eq(r1, &"", "first buyer gets the door")
 	assert_eq(r2, &"already_open", "second is told it is open")
-	assert_eq(e.wallet(1).points, 250)
+	assert_eq(e.wallet(1).points, 200)
 	assert_eq(e.wallet(2).points, 1000, "second keeps their points")
 	assert_eq(bought.size(), 1, "exactly one purchase")
 	d.free()
@@ -53,10 +53,10 @@ func test_same_frame_door_contention() -> void:
 func test_door_not_enough_points() -> void:
 	var e := _setup()
 	var d := BulkheadDoor.new()
-	d.cost = 750
+	d.cost = 800
 	assert_eq(e.handle_use(1, d, Vector3.ZERO), &"points")
 	assert_true(not d.is_open)
-	assert_eq(e.wallet(1).points, 500)
+	assert_eq(e.wallet(1).points, Content.balance.start_points)
 	d.free()
 	_free(e)
 
@@ -76,7 +76,7 @@ func test_wall_buy_weapon_then_ammo() -> void:
 	var e := _setup()
 	var w := WallBuy.new()
 	w.weapon_id = &"hornet"
-	e.wallet(1).points = 1500
+	e.wallet(1).points = 1600
 	assert_eq(w.cost_for(e.players[1]), Content.weapon(&"hornet").cost, "not owned: full price")
 	assert_eq(e.handle_use(1, w, Vector3.ZERO), &"", "buy the gun")
 	assert_eq(e.wallet(1).points, 500)
@@ -88,7 +88,7 @@ func test_wall_buy_weapon_then_ammo() -> void:
 	st.reserve = 0
 	assert_eq(w.cost_for(e.players[1]), st.data.ammo_cost, "owning it: ammo price")
 	assert_eq(e.handle_use(1, w, Vector3.ZERO), &"", "buy ammo")
-	assert_eq(e.wallet(1).points, 0)
+	assert_eq(e.wallet(1).points, 60)
 	assert_eq(st.mag, st.data.mag)
 	assert_eq(st.reserve, st.data.reserve)
 	w.free()
@@ -97,7 +97,7 @@ func test_wall_buy_weapon_then_ammo() -> void:
 func test_wall_buy_rejects_non_wall_weapon() -> void:
 	var e := _setup()
 	var w := WallBuy.new()
-	w.weapon_id = &"ray_lancer"
+	w.weapon_id = &"cathode_carbine"
 	assert_eq(e.handle_use(1, w, Vector3.ZERO), &"invalid")
 	w.free()
 	_free(e)
@@ -110,12 +110,12 @@ func test_hit_on_dead_or_gone_zombie_pays_nothing() -> void:
 	zs.zombies[5] = z
 	e.wallet(1).points = 0
 	e.on_hit(1, Zombie.hit_id(5), 10.0, false)
-	assert_eq(e.wallet(1).points, 10, "live zombie pays")
+	assert_eq(e.wallet(1).points, 5, "live zombie pays")
 	z.alive = false
 	e.on_hit(1, Zombie.hit_id(5), 10.0, false)
-	assert_eq(e.wallet(1).points, 10, "corpse pays nothing")
+	assert_eq(e.wallet(1).points, 5, "corpse pays nothing")
 	e.on_hit(1, Zombie.hit_id(6), 10.0, false)
-	assert_eq(e.wallet(1).points, 10, "despawned zombie pays nothing")
+	assert_eq(e.wallet(1).points, 5, "despawned zombie pays nothing")
 	z.free(); zs.free()
 	_free(e)
 
@@ -141,14 +141,14 @@ func test_bind_wiring_with_real_signals() -> void:
 	zs.zombies[9] = z
 	e.wallet(3).points = 0
 	e.weapons.hit.emit(3, Zombie.hit_id(9), 20.0, false)
-	assert_eq(e.wallet(3).points, 10, "hit")
+	assert_eq(e.wallet(3).points, 5, "hit")
 	zs.zombie_died.emit(9, 3, true, false, Vector3.ZERO)
-	assert_eq(e.wallet(3).points, 110, "killing headshot: hit + kill + bonus")
+	assert_eq(e.wallet(3).points, 85, "killing headshot: hit + kill + bonus")
 	var b := Barricade.new()
 	e.hook_barricade(b)
 	b.tear_one()
 	b.repair_one(3)
-	assert_eq(e.wallet(3).points, 120, "board")
+	assert_eq(e.wallet(3).points, 100, "board")
 	Net.player_left.emit(3)
 	assert_true(not e.wallets.has(3), "wallet dropped on leave")
 	for o in old:

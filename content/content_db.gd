@@ -2,7 +2,7 @@ extends Node
 ## Autoload "Content": loads all data resources and validates them.
 
 const SUDS_EFFECTS := [&"max_hp", &"reload_mult", &"revive", &"fire_rate_mult"]
-const POWERUP_KINDS := [&"double_points", &"max_ammo", &"purge", &"overload", &"fortify", &"voucher"]
+const POWERUP_KINDS := [&"bonus_ration", &"resupply", &"purge", &"overload", &"fortify", &"voucher"]
 
 var weapons: Dictionary = {}
 var enemies: Dictionary = {}
@@ -75,6 +75,8 @@ func validate_weapon(w: WeaponData) -> PackedStringArray:
 		errs.append("%s: refit must not be itself" % n)
 	elif w.refit != null and w.refit.refit != null:
 		errs.append("%s: refit weapon must have refit == null" % n)
+	if w.pellets < 1 or w.pellets > 16:
+		errs.append("%s: pellets must be 1..16" % n)
 	if w.mag <= 0:
 		errs.append("%s: mag must be > 0" % n)
 	if w.recoil.is_empty():

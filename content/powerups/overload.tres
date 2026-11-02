@@ -7,4 +7,4 @@ script = ExtResource("1")
 id = &"overload"
 display_name = "Overload"
 kind = &"overload"
-duration_s = 30.0
+duration_s = 25.0

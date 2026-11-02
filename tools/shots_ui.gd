@@ -72,7 +72,7 @@ func _game() -> void:
 	Game.grant_suds(1, Content.suds[&"grape_bulwark"])
 	Game.grant_suds(1, Content.suds[&"overclock_orange"])
 	Game.grant_suds(1, Content.suds[&"snapback_fizz"])
-	game.pu.collect(&"double_points", 1)
+	game.pu.collect(&"bonus_ration", 1)
 	game.pu.collect(&"overload", 1)
 	game.pu.clock += 11.0                              # the timers are partly run down
 	# stand in front of a wall buy (prompt)

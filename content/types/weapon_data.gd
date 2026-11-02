@@ -20,4 +20,5 @@ extends Resource
 @export var ammo_cost: int = 0
 @export var scene: PackedScene
 @export var refit: WeaponData
+@export var pellets: int = 1            # rays per shot (shotgun); damage is per pellet
 @export var is_wall_buy: bool = false

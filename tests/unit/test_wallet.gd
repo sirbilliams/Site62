@@ -28,13 +28,13 @@ func test_points_hit_kill_headshot_melee() -> void:
 	var e := _eco()
 	var b := Content.balance
 	e.on_hit(1, -5, 20.0, false)
-	assert_eq(e.wallet(1).points, b.start_points + 10, "hit")
+	assert_eq(e.wallet(1).points, b.start_points + 5, "hit")
 	e.wallet(1).points = 0
 	e.on_kill(1, false, false)
-	assert_eq(e.wallet(1).points, 60, "kill")
+	assert_eq(e.wallet(1).points, 50, "kill")
 	e.wallet(1).points = 0
 	e.on_kill(1, true, false)
-	assert_eq(e.wallet(1).points, 100, "headshot kill")
+	assert_eq(e.wallet(1).points, 80, "headshot kill")
 	e.wallet(1).points = 0
 	e.on_kill(1, false, true)
 	assert_eq(e.wallet(1).points, 120, "melee kill")
@@ -53,7 +53,7 @@ func test_board_cap() -> void:
 	assert_eq(e.wallet(1).points, 400, "board points stop at 400 per round")
 	e.reset_round()
 	e.on_board(1)
-	assert_eq(e.wallet(1).points, 410, "new round pays again")
+	assert_eq(e.wallet(1).points, 415, "new round pays again")
 	_free(e)
 
 func test_board_cap_is_per_player() -> void:
@@ -63,17 +63,17 @@ func test_board_cap_is_per_player() -> void:
 	for i in 60:
 		e.on_board(1)
 	e.on_board(2)
-	assert_eq(e.wallet(2).points, 10)
+	assert_eq(e.wallet(2).points, 15)
 	_free(e)
 
-func test_double_points() -> void:
+func test_bonus_ration() -> void:
 	var e := _eco()
 	e.wallet(1).points = 0
 	var on := [true]
 	e.double_source = func(): return on[0]
 	e.on_hit(1, -5, 20.0, false)
-	assert_eq(e.wallet(1).points, 20, "hit x2")
+	assert_eq(e.wallet(1).points, 10, "hit x2")
 	on[0] = false
 	e.on_hit(1, -5, 20.0, false)
-	assert_eq(e.wallet(1).points, 30, "back to normal")
+	assert_eq(e.wallet(1).points, 15, "back to normal")
 	_free(e)

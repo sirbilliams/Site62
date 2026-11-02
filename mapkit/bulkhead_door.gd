@@ -3,7 +3,7 @@ extends Interactable
 ## A locked bulkhead. Buying it (host) opens the Zones in `unlocks`, enables its navigation link and removes its
 ## collision. The open state is sent to clients reliably.
 
-@export var cost: int = 750
+@export var cost: int = 800
 @export var unlocks: Array[StringName] = []
 
 var is_open := false

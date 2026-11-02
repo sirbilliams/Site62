@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = &"snapback_fizz"
 display_name = "Snapback Fizz"
-cost = 3000
+cost = 1800
 effect = &"reload_mult"
 value = 0.5
 color = Color(0.2, 0.7, 0.9, 1)

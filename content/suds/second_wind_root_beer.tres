@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = &"second_wind_root_beer"
 display_name = "Second-Wind Root Beer"
-cost = 1500
+cost = 1200
 effect = &"revive"
 value = 0.5
 color = Color(0.4, 0.22, 0.1, 1)

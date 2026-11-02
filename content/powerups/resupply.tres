@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1")
-id = &"max_ammo"
+id = &"resupply"
 display_name = "Resupply"
-kind = &"max_ammo"
+kind = &"resupply"
 duration_s = 0.0

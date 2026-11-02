@@ -161,7 +161,7 @@ func _host_step() -> void:
 		"buy_r":
 			if reports.has("a") and reports["a"].step == "buy":
 				var r: Dictionary = reports["a"]
-				if not _check(r.ids == ["sentinel_45", "hornet"] and r.held == "hornet" and r.mags == [8, 32] and r.grenades == 2, "buy: client view %s" % str(r)):
+				if not _check(r.ids == ["sentinel_45", "hornet"] and r.held == "hornet" and r.mags == [9, 36] and r.grenades == 2, "buy: client view %s" % str(r)):
 					return
 				_zspawn("far", SPAWN + Vector3(0, 0, -6), 100000.0)
 				_cmd_to("swap_try")
@@ -170,14 +170,14 @@ func _host_step() -> void:
 				_fail("no buy report")
 		"swap1":
 			if age > 3.0:
-				if not _check(k.held == 0 and _mags(k) == [7, 32], "swap1: host held %d mags %s" % [k.held, str(_mags(k))]):
+				if not _check(k.held == 0 and _mags(k) == [8, 36], "swap1: host held %d mags %s" % [k.held, str(_mags(k))]):
 					return
 				_ask("swap1")
 				_go("swap1_r")
 		"swap1_r":
 			if reports.has("a") and reports["a"].step == "swap1":
 				var r: Dictionary = reports["a"]
-				if not _check(_view_ok(r, "sentinel_45", [7, 32]) and r.try_fire == false and r.late_fire == true, "swap1: client view %s" % str(r)):
+				if not _check(_view_ok(r, "sentinel_45", [8, 36]) and r.try_fire == false and r.late_fire == true, "swap1: client view %s" % str(r)):
 					return
 				_cmd_to("swap_fire")
 				_go("swap2")
@@ -185,13 +185,13 @@ func _host_step() -> void:
 				_fail("no swap1 report")
 		"swap2":
 			if age > 3.0:
-				if not _check(k.held == 1 and _mags(k) == [7, 31], "swap2: host held %d mags %s" % [k.held, str(_mags(k))]):
+				if not _check(k.held == 1 and _mags(k) == [8, 35], "swap2: host held %d mags %s" % [k.held, str(_mags(k))]):
 					return
 				_ask("swap2")
 				_go("swap2_r")
 		"swap2_r":
 			if reports.has("a") and reports["a"].step == "swap2":
-				if not _check(_view_ok(reports["a"], "hornet", [7, 31]), "swap2: client view %s" % str(reports["a"])):
+				if not _check(_view_ok(reports["a"], "hornet", [8, 35]), "swap2: client view %s" % str(reports["a"])):
 					return
 				print("KIT NET SWAP OK host and client agree on held gun and both slots' ammo")
 				zs.despawn(z.far)

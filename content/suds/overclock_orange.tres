@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = &"overclock_orange"
 display_name = "Overclock Orange"
-cost = 2000
+cost = 2200
 effect = &"fire_rate_mult"
 value = 1.33
 color = Color(1, 0.55, 0.1, 1)

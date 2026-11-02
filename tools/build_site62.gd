@@ -525,19 +525,19 @@ func _kit() -> void:
 	for x in [-5.0, 5.0]:
 		_deco("Boards_%d" % x, x - 0.9, -0.12, x + 0.9, 0.12, 1.1, 1.9, "board")
 	var d1 := _inst("res://mapkit/bulkhead_door.tscn", "Door_cafeteria", Vector3(14, 0, 8), PI / 2.0)
-	d1.cost = 750
+	d1.cost = 800
 	d1.unlocks.append(&"cafeteria")
 	var d2 := _inst("res://mapkit/bulkhead_door.tscn", "Door_offices", Vector3(28, 0, 20))
-	d2.cost = 1000
+	d2.cost = 1100
 	d2.unlocks.append(&"offices")
 	var d3 := _inst("res://mapkit/bulkhead_door.tscn", "Door_reactor", Vector3(14, 0, 32), PI / 2.0)
-	d3.cost = 1250
+	d3.cost = 1300
 	d3.unlocks.append(&"reactor_wing")
 	var d4 := _inst("res://mapkit/bulkhead_door.tscn", "Door_refit", Vector3(0, 0, 44))
-	d4.cost = 1500
+	d4.cost = 1600
 	d4.unlocks.append(&"refit_chamber")
 	var d5 := _inst("res://mapkit/bulkhead_door.tscn", "Door_loop", Vector3(0, 0, 20))     # lab <-> reactor shortcut: closes the loop
-	d5.cost = 1250
+	d5.cost = 1300
 	d5.unlocks.append(&"reactor_wing")
 	for d in [d1, d2, d3, d4, d5]:
 		var slab := MeshInstance3D.new()
