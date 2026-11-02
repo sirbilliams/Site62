@@ -14,8 +14,11 @@ var refused_count := 0           # host: number of refused joiners
 var debug_claims := {}           # host, debug only: sender id -> ["rejected:3", ...]
 var _beacon: LanBeacon
 var _ready_emitted := false
+var link_sim := LinkSim.new()
 
 func _ready() -> void:
+	link_sim.configure_from_args()
+	add_child(link_sim)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.server_disconnected.connect(leave)
@@ -75,6 +78,25 @@ func sender_is(id: int) -> bool:
 	if s == 0:
 		return multiplayer.is_server()
 	return s == id
+
+## Unreliable game message to `peer` (0 = everyone). Goes through LinkSim (no-op when off).
+func send_unreliable(node: Node, method: StringName, peer: int, args: Array) -> void:
+	if link_sim.enabled():
+		link_sim.submit(_do_send.bind(node, method, peer, args))
+	else:
+		_do_send(node, method, peer, args)
+
+func _do_send(node: Node, method: StringName, peer: int, args: Array) -> void:
+	if not is_instance_valid(node) or not node.is_inside_tree():
+		return
+	if multiplayer.multiplayer_peer == null or multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
+		return
+	var a: Array = [method] + args
+	if peer != 0:
+		a = [peer, method] + args
+		node.callv("rpc_id", a)
+	else:
+		node.callv("rpc", a)
 
 # Host: a peer connected.
 func _on_peer_connected(id: int) -> void:
