@@ -101,6 +101,16 @@ func damage(peer: int, dmg: float) -> void:
 		_go_down(peer, p)
 		_check_game_over()
 
+## Host: a player joined mid-match. They watch (DEAD: no movement, not counted for game over, ignored by
+## zombies and pickups) until the next round start respawns them with the starting kit.
+func spectate(id: int) -> void:
+	var p: Player = net.players.get(id) if net != null else null
+	if p == null:
+		return
+	p.state = Player.DEAD
+	p.hp = 0.0
+	_stat(id)
+
 func on_round_started(r: int) -> void:
 	round = r
 	if not Net.is_host() or net == null or game_over:

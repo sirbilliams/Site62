@@ -29,6 +29,9 @@ func _ready() -> void:
 		if a == "--test=life":
 			add_child(load("res://tests/net/net_life.gd").new())
 			return
+		if a == "--test=latejoin":
+			add_child(load("res://tests/net/net_latejoin.gd").new())
+			return
 		if a == "--test=shoot":
 			add_child(load("res://tests/net/net_shoot.gd").new())
 			return

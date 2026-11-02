@@ -401,7 +401,12 @@ func _apply_host_ammo(slot: int, mag: int, reserve: int) -> void:
 func send_kit(peer: int, force := true) -> void:
 	if not Net.is_host() or peer == Net.local_id() or not kits.has(peer):
 		return
-	var k: Inventory = kits[peer]
+	var a := kit_args(peer)
+	Net.send_reliable(self, &"_rx_kit", peer, a + [force])
+
+## Host: the arguments of apply_kit for `peer` (without `force`): held, ids, mags, reserves, grenades, swap ack.
+func kit_args(peer: int) -> Array:
+	var k := kit_for(peer)
 	var ids: Array = []
 	var mags: Array = []
 	var res: Array = []
@@ -409,10 +414,14 @@ func send_kit(peer: int, force := true) -> void:
 		ids.append(String(st.data.id) if st != null else "")
 		mags.append(st.mag if st != null else 0)
 		res.append(st.reserve if st != null else 0)
-	Net.send_reliable(self, &"_rx_kit", peer, [k.held, ids, mags, res, k.grenades, _swap_count.get(peer, 0), force])
+	return [k.held, ids, mags, res, k.grenades, _swap_count.get(peer, 0)]
 
 @rpc("authority", "reliable")
 func _rx_kit(held: int, ids: Array, mags: Array, res: Array, grenades: int, swap_ack: int, force: bool) -> void:
+	apply_kit(held, ids, mags, res, grenades, swap_ack, force)
+
+## Client: take the host's kit (a kit message or the late join WorldSnapshot).
+func apply_kit(held: int, ids: Array, mags: Array, res: Array, grenades: int, swap_ack: int, force: bool) -> void:
 	if Net.is_host() or (_inflight > 0 and not force) or ids.size() != 2 or mags.size() != 2 or res.size() != 2:
 		return
 	var k := kit_for(Net.local_id())

@@ -30,6 +30,15 @@ func clear_except(keep: Array) -> void:
 		if not keep.has(_owned[k].effect):
 			_owned.erase(k)
 
+## [[id, effect, value], ...] sorted by id (late join snapshot).
+func to_list() -> Array:
+	var out: Array = []
+	var keys := _owned.keys()
+	keys.sort()
+	for k in keys:
+		out.append([String(k), String(_owned[k].effect), float(_owned[k].value)])
+	return out
+
 func has(id: StringName) -> bool:
 	return _owned.has(id)
 

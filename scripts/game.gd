@@ -3,7 +3,7 @@ extends Node
 ##  power    - the generator switch (PowerSwitch); Suds machines and the Isotope Refit need it.
 ##  suds_of  - the Ethereal-Suds of every player (host and clients mirror it).
 ##  vouchers - host: peers whose next Requisition Crate is free (Task 10's voucher power-up gives one).
-## Late join resync is Task 12.
+## A late joiner gets power, every Suds and the vouchers in the WorldSnapshot (snapshot / apply_snapshot below).
 
 signal power_changed(on: bool)
 signal suds_changed(peer: int)
@@ -40,6 +40,45 @@ func suds_of(peer: int) -> SudsEffects:
 ## The local player's hp ceiling.
 func max_hp_of(peer: int, base: float) -> float:
 	return suds_of(peer).max_hp(base)
+
+# ---------------------------------------------------------------- late join
+
+## Host: power, the Suds of each peer in `peers`, and the peers holding a voucher.
+func snapshot(peers: Array) -> Dictionary:
+	var suds := {}
+	for id in peers:
+		suds[id] = suds_of(id).to_list()
+	var v: Array = []
+	for id in peers:
+		if vouchers.has(id):
+			v.append(id)
+	return {"power": power, "suds": suds, "vouchers": v}
+
+## Client: mirror a snapshot() of the host.
+func apply_snapshot(d: Dictionary) -> void:
+	if Net.is_host():
+		return
+	if typeof(d.get("power")) == TYPE_BOOL:
+		_apply_power(d.power)
+	var suds = d.get("suds")
+	if suds is Dictionary:
+		for peer in suds:
+			var list = suds[peer]
+			if typeof(peer) != TYPE_INT or not list is Array:
+				continue
+			var fresh := SudsEffects.new()
+			for e in list:
+				if e is Array and e.size() == 3 and typeof(e[0]) == TYPE_STRING and typeof(e[1]) == TYPE_STRING \
+						and (typeof(e[2]) == TYPE_FLOAT or typeof(e[2]) == TYPE_INT) and Content.SUDS_EFFECTS.has(StringName(e[1])):
+					fresh.add_raw(StringName(e[0]), StringName(e[1]), float(e[2]))
+			_suds[peer] = fresh
+			suds_changed.emit(peer)
+	var v = d.get("vouchers")
+	if v is Array:
+		vouchers.clear()
+		for id in v:
+			if typeof(id) == TYPE_INT:
+				vouchers[id] = true
 
 # ---------------------------------------------------------------- vouchers (host)
 

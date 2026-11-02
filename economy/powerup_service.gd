@@ -30,7 +30,6 @@ var _purging := false
 
 func _ready() -> void:
 	name = "PowerupService"
-	Net.player_joined.connect(_on_player_joined)
 
 ## Wire to the other services (host and clients).
 func bind(pn: PlayerNet, zs: ZombieSync, eco: EconomyService, svc: WeaponService, round_source: Object = null) -> void:
@@ -192,18 +191,37 @@ func _fortify() -> void:
 
 # ---------------------------------------------------------------- replication
 
-func _on_player_joined(id: int) -> void:
-	if not Net.is_host():
-		return
+## Host: live pickups and the remaining seconds of every timed effect (a late joiner gets them in the WorldSnapshot).
+func snapshot() -> Dictionary:
+	var drops: Array = []
 	for pid in pickups:
 		var p: PowerupPickup = pickups[pid]
-		Net.send_reliable(self, &"_rx_drop", id, [pid, String(p.kind), p.position])
+		drops.append([pid, String(p.kind), p.position])
+	var act := {}
 	for kind in active:
 		if is_active(kind):
-			Net.send_reliable(self, &"_rx_active", id, [String(kind), float(active[kind]) - clock])
+			act[String(kind)] = float(active[kind]) - clock
+	return {"pickups": drops, "active": act}
+
+## Client: mirror a snapshot() of the host.
+func apply_snapshot(d: Dictionary) -> void:
+	if Net.is_host():
+		return
+	var drops = d.get("pickups")
+	if drops is Array:
+		for e in drops:
+			if e is Array and e.size() == 3:
+				_apply_drop(e[0], e[1], e[2])
+	var act = d.get("active")
+	if act is Dictionary:
+		for k in act:
+			_rx_active(k, act[k])
 
 @rpc("authority", "reliable")
 func _rx_drop(id, kind, pos) -> void:
+	_apply_drop(id, kind, pos)
+
+func _apply_drop(id, kind, pos) -> void:
 	if Net.is_host() or not (id is int and kind is String and pos is Vector3) or not pos.is_finite():
 		return
 	if pickups.has(id) or pickups.size() > 64 or not Content.POWERUP_KINDS.has(StringName(kind)):

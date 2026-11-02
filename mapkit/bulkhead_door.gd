@@ -11,6 +11,7 @@ var link: NavigationLink3D
 var blocker: StaticBody3D
 
 func _ready() -> void:
+	add_to_group(&"doors")
 	link = get_node_or_null("Link")
 	blocker = get_node_or_null("Blocker")
 	_apply()

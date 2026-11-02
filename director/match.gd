@@ -8,7 +8,8 @@ extends Node
 ##  - round_started -> EconomyService.reset_round (board cap reset + grenade refill).
 ##  - Zone.opened -> the SpawnZones with that zone_id turn active.
 ##  - Director player count = connected players (Net.players) unless `player_count` is set.
-## Clients hold a Match node of the same name only to receive `round` and `phase` (reliable).
+## Clients hold a Match node of the same name only to receive `round` and `phase` (reliable). A late joiner gets
+## them from the WorldSnapshot, not from here.
 
 signal round_started(r: int)
 signal round_ended(r: int)
@@ -30,11 +31,6 @@ var _spawn_zones: Array[SpawnZone] = []
 
 func _ready() -> void:
 	name = "Match"
-	Net.player_joined.connect(_on_player_joined)
-
-func _exit_tree() -> void:
-	if Net.player_joined.is_connected(_on_player_joined):
-		Net.player_joined.disconnect(_on_player_joined)
 
 func state() -> Dictionary:
 	return {"round": round, "phase": String(phase)}
@@ -122,12 +118,13 @@ func _on_round_ended(r: int) -> void:
 func _broadcast(peer: int) -> void:
 	Net.send_reliable(self, &"_rx_state", peer, [round, String(phase)])
 
-func _on_player_joined(id: int) -> void:
-	if running and Net.is_host():
-		_broadcast(id)
-
 @rpc("authority", "reliable")
 func _rx_state(r, p) -> void:
+	if not Net.is_host():
+		apply_state(r, p)
+
+## Client: take round and phase from the host (a round message or the late join WorldSnapshot).
+func apply_state(r, p) -> void:
 	if Net.is_host() or not (r is int and p is String) or r < 0:
 		return
 	if p != String(PLAYING) and p != String(BREAK):

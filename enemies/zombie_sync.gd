@@ -134,8 +134,7 @@ func _remove(zid: int) -> void:
 func _on_player_joined(id: int) -> void:
 	if not Net.is_host():
 		return
-	_hook_barricades()
-	Net.send_reliable(self, &"_rx_boards_all", id, [_boards_list()])
+	_hook_barricades()           # the boards reach a joiner through the WorldSnapshot
 	for z: Zombie in zombies.values():
 		if z.alive:
 			Net.send_reliable(self, &"_rx_spawn", id, [z.zid, z.position, String(z.data.id), z.band])
@@ -143,7 +142,7 @@ func _on_player_joined(id: int) -> void:
 func _on_boards_changed(n: int, b: Barricade) -> void:
 	Net.send_reliable(self, &"_rx_boards", 0, [_barricades().find(b), n])
 
-func _boards_list() -> Array:
+func boards_list() -> Array:
 	var out: Array = []
 	for b: Barricade in _barricades():
 		out.append(b.boards)
@@ -205,8 +204,8 @@ func _rx_boards(index, n) -> void:
 	if index >= 0 and index < bars.size():
 		(bars[index] as Barricade).set_boards(n)
 
-@rpc("authority", "reliable")
-func _rx_boards_all(list) -> void:
+## Client: every barricade's board count (late join WorldSnapshot; index = tree order of the "barricades" group).
+func apply_boards(list) -> void:
 	if Net.is_host() or not list is Array:
 		return
 	var bars := _barricades()
