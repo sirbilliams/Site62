@@ -27,7 +27,7 @@ run b b
 wait $HP; HS=$?
 sleep 4
 [ $HS = 0 ] || fail "host exit $HS"
-for t in "$OUT/host.log:MOVE NET PASS" "$OUT/a.log:MOVE NET CLIENT OK (a)" "$OUT/b.log:MOVE NET CLIENT OK (b"; do
+for t in "$OUT/host.log:MOVE NET PASS" "$OUT/a.log:MOVE NET WARP OK (a)" "$OUT/a.log:MOVE NET CLIENT OK (a)" "$OUT/b.log:MOVE NET CLIENT OK (b"; do
   grep -q "${t#*:}" "${t%%:*}" || fail "missing '${t#*:}' in $(basename "${t%%:*}")"
 done
 grep -h "MOVE" "$OUT"/*.log

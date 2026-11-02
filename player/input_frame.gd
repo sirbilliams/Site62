@@ -23,14 +23,21 @@ var t := 0.0                  # client clock (s)
 func to_array() -> Array:
 	return [seq, move.x, move.y, look_yaw, look_pitch, buttons, t]
 
-static func from_array(a: Array) -> InputFrame:
+static func _num(v) -> bool:
+	return (typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT) and is_finite(float(v))
+
+## Returns null for malformed or non-finite wire data (never trust the wire).
+static func from_array(a) -> InputFrame:
+	if typeof(a) != TYPE_ARRAY or a.size() < 7:
+		return null
+	for v in a:
+		if not _num(v):
+			return null
 	var f := InputFrame.new()
-	if a.size() < 7:
-		return f
 	f.seq = int(a[0])
-	f.move = Vector2(float(a[1]), float(a[2])).limit_length(1.0)  # never trust the wire
+	f.move = Vector2(float(a[1]), float(a[2])).limit_length(1.0)
 	f.look_yaw = float(a[3])
 	f.look_pitch = float(a[4])
-	f.buttons = int(a[5])
+	f.buttons = int(a[5]) & 1023
 	f.t = float(a[6])
 	return f

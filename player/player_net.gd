@@ -6,6 +6,9 @@ extends Node3D
 const DT := 1.0 / 60.0
 const SNAP_EVERY := 3            # physics ticks per snapshot (20 Hz)
 const BATCH := 3
+const CREDIT_REFILL := 1.25      # frames per host physics tick (client runs 1.0)
+const CREDIT_MAX := 6.0          # slack for jitter bursts
+const MAX_SEQ_JUMP := 120
 const PLAYER_SCENE := preload("res://player/player.tscn")
 
 var players := {}                # peer id -> Player
@@ -14,6 +17,7 @@ var input_source := Callable()   # () -> InputFrame (move/buttons/look); default
 var _seq := 0
 var _recent: Array = []          # last BATCH sent frames as arrays
 var _last_seq := {}              # host: peer id -> last applied seq
+var _credit := {}                # host: peer id -> frame credit (rate cap)
 var _tick := 0
 var _yaw := 0.0
 var _pitch := 0.0
@@ -39,11 +43,15 @@ func _sample_keyboard() -> InputFrame:
 	return f
 
 func _space() -> PhysicsDirectSpaceState3D:
+	if not is_inside_tree():
+		return null
 	return get_world_3d().direct_space_state
 
 func ensure_player(id: int) -> Player:
 	if players.has(id):
 		return players[id]
+	if not Net.players.has(id):
+		return null                  # no ghost players
 	var p: Player = PLAYER_SCENE.instantiate()
 	p.setup(id, Content.balance, id == Net.local_id())
 	p.is_authority = Net.is_host()
@@ -61,6 +69,7 @@ func _sync_roster() -> void:
 			players[id].queue_free()
 			players.erase(id)
 			_last_seq.erase(id)
+			_credit.erase(id)
 
 func local_player() -> Player:
 	return players.get(Net.local_id())
@@ -73,6 +82,7 @@ func _physics_process(_dt: float) -> void:
 	if me != null:
 		_local_tick(me)
 	if Net.is_host():
+		_refill_credit()
 		_tick += 1
 		if _tick % SNAP_EVERY == 0:
 			_send_snapshot()
@@ -93,23 +103,41 @@ func _local_tick(me: Player) -> void:
 
 @rpc("any_peer", "unreliable")
 func _rx_inputs(batch: Array) -> void:
-	if not Net.is_host():
+	if not Net.is_host() or batch.size() > 8:
 		return
-	var id := multiplayer.get_remote_sender_id()
-	if not Net.players.has(id) or batch.size() > 8:
-		return
+	_apply_batch(multiplayer.get_remote_sender_id(), batch)
+
+## Host: apply new frames from `id`. Returns how many were applied.
+## Dropped: malformed, duplicate/old seq, seq jumps > MAX_SEQ_JUMP, and anything beyond the rate credit.
+func _apply_batch(id: int, batch: Array) -> int:
 	var p := ensure_player(id)
+	if p == null:
+		return 0
 	var frames: Array = []
 	for a in batch:
-		if a is Array:
-			frames.append(InputFrame.from_array(a))
+		var f := InputFrame.from_array(a)
+		if f != null:
+			frames.append(f)
 	frames.sort_custom(func(x: InputFrame, y: InputFrame): return x.seq < y.seq)
 	var last: int = _last_seq.get(id, -1)
+	var credit: float = _credit.get(id, CREDIT_MAX)
+	var applied := 0
 	for f: InputFrame in frames:
-		if f.seq > last:
-			p.simulate(f, _space(), DT, false)
-			last = f.seq
+		if f.seq <= last or f.seq > last + MAX_SEQ_JUMP:
+			continue
+		if credit < 1.0:
+			break                    # excess is dropped, never queued
+		credit -= 1.0
+		p.simulate(f, _space(), DT, false)
+		last = f.seq
+		applied += 1
 	_last_seq[id] = last
+	_credit[id] = credit
+	return applied
+
+func _refill_credit() -> void:
+	for id in _credit.keys():
+		_credit[id] = minf(_credit[id] + CREDIT_REFILL, CREDIT_MAX)
 
 func _send_snapshot() -> void:
 	var out: Array = []
@@ -125,4 +153,6 @@ func _rx_snapshot(entries: Array) -> void:
 		return
 	for s in entries:
 		if s is Dictionary and s.has("id") and s.has("pos"):
-			ensure_player(s.id).apply_snapshot(s, _space(), DT)
+			var p := ensure_player(s.id)
+			if p != null:
+				p.apply_snapshot(s, _space(), DT)

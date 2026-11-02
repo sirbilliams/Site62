@@ -8,6 +8,7 @@ enum { ALIVE, DOWN, DEAD }
 const INTERP_DELAY_MS := 100.0
 const MAX_PENDING := 180
 const EYE_HEIGHT := 1.6
+const SMOOTH_S := 0.1
 
 var peer_id := 0
 var hp := 100.0
@@ -21,6 +22,9 @@ var pending: Array[InputFrame] = []
 var last_ack := -1
 var yaw := 0.0
 var pitch := 0.0
+var max_correction := 0.0         # largest reconcile jump seen (m)
+var _offset_rate := 0.0
+var _offset := Vector3.ZERO      # visual smoothing, decays over SMOOTH_S
 var _buf: Array = []             # [recv_msec, pos, yaw]
 var camera: Camera3D
 
@@ -57,7 +61,7 @@ func simulate(f: InputFrame, space: PhysicsDirectSpaceState3D, dt: float, predic
 	_show(motor_state.pos)
 
 func _show(p: Vector3) -> void:
-	position = p
+	position = p + _offset
 	rotation.y = yaw
 	if camera:
 		camera.rotation.x = pitch
@@ -74,11 +78,17 @@ func apply_snapshot(s: Dictionary, space: PhysicsDirectSpaceState3D = null, dt :
 		if ack < last_ack:
 			return                       # stale (reordered) snapshot
 		last_ack = ack
+		var before: Vector3 = motor_state.pos
 		motor_state = {"pos": s.pos, "vy": s.vy, "grounded": s.grounded}
 		while not pending.is_empty() and pending[0].seq <= ack:
 			pending.pop_front()
 		for f in pending:                # replay unacknowledged inputs
 			motor_state = Motor.step(motor_state, f, dt, space, balance)
+		var jump: float = before.distance_to(motor_state.pos)
+		max_correction = maxf(max_correction, jump)
+		# blend the visual toward the corrected position; motor_state itself snaps
+		_offset = (_offset + before - motor_state.pos) if jump < 3.0 else Vector3.ZERO
+		_offset_rate = _offset.length() / SMOOTH_S
 		_show(motor_state.pos)
 	else:
 		_buf.append([Time.get_ticks_msec(), s.pos, float(s.get("yaw", 0.0)), float(s.get("pitch", 0.0))])
@@ -86,6 +96,10 @@ func apply_snapshot(s: Dictionary, space: PhysicsDirectSpaceState3D = null, dt :
 			_buf.pop_front()
 
 func _process(_dt: float) -> void:
+	if _offset != Vector3.ZERO:
+		_offset = _offset.move_toward(Vector3.ZERO, _offset_rate * _dt)
+		if is_local or is_authority:
+			_show(motor_state.pos)
 	if is_local or is_authority or _buf.is_empty():
 		return
 	var rt := Time.get_ticks_msec() - INTERP_DELAY_MS

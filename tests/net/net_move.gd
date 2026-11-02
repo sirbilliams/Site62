@@ -18,6 +18,7 @@ var ready_t := -1.0
 var first_joiner := -1
 var done := false
 var sent_final := false
+var warped := false
 var last_fwd_seq := -1
 # host
 var hist: Array = []              # [unix, Vector3] of A's host position
@@ -102,8 +103,16 @@ func _physics_process(_dt: float) -> void:
 			ready_t = t
 		if start_t < 0.0 and ready_t >= 0.0 and me != null and me.last_ack >= 0 and t - ready_t > 3.0:
 			start_t = t
+		if start_t >= 0.0 and not warped and t - start_t > 1.0:
+			warped = true            # simulate a prediction error: shove the local motor ~1 m sideways
+			me.max_correction = 0.0
+			me.motor_state.pos += Vector3(1.0, 0, 0)
 		if start_t >= 0.0 and not sent_final and t - start_t > HOLD_S + SETTLE_S:
 			sent_final = true
+			if me.max_correction < 0.8:
+				_fail("warp was not corrected by the host (max correction %.2f)" % me.max_correction)
+				return
+			print("MOVE NET WARP OK (a): corrected by %.2f m" % me.max_correction)
 			if me.last_ack < last_fwd_seq:
 				_fail("last forward seq %d never acked (ack %d)" % [last_fwd_seq, me.last_ack])
 				return

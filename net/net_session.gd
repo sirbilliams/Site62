@@ -67,10 +67,10 @@ func leave() -> void:
 			player_left.emit(id)
 
 func is_host() -> bool:
-	return multiplayer.is_server()
+	return multiplayer == null or multiplayer.is_server()   # null: not in tree yet (unit tests)
 
 func local_id() -> int:
-	return multiplayer.get_unique_id()
+	return 1 if multiplayer == null else multiplayer.get_unique_id()
 
 ## True when the RPC sender is `id`, or when called locally on the host (no RPC in flight).
 func sender_is(id: int) -> bool:
@@ -91,6 +91,8 @@ func _do_send(node: Node, method: StringName, peer: int, args: Array) -> void:
 		return
 	if multiplayer.multiplayer_peer == null or multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
 		return
+	if peer != 0 and not multiplayer.get_peers().has(peer):
+		return                   # peer left while the message was in the sim queue
 	var a: Array = [method] + args
 	if peer != 0:
 		a = [peer, method] + args
