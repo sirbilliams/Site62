@@ -24,3 +24,4 @@ extends Resource
 @export var crouch_speed: float = 2.2
 @export var jump_speed: float = 4.8
 @export var gravity: float = 14.0
+@export var max_alive: int = 40

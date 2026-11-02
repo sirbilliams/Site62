@@ -27,3 +27,4 @@ sprint_speed = 6.8
 crouch_speed = 2.2
 jump_speed = 4.8
 gravity = 14.0
+max_alive = 40
