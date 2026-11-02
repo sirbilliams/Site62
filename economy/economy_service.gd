@@ -193,6 +193,46 @@ func _rx_denied(path: String, reason: String) -> void:
 	denied_count += 1
 	denied.emit(path, StringName(reason))
 
+# ---------------------------------------------------------------- barricade repair
+
+const REPAIR_REACH := 2.5
+
+## Any peer: ask to nail one board back (player holds use at the inside of a damaged barricade).
+@rpc("any_peer", "reliable")
+func request_repair(player, path) -> void:
+	if not Net.is_host():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if sender == 0 or typeof(player) != TYPE_INT or typeof(path) != TYPE_NODE_PATH:
+		return
+	if not Net.sender_is(player) or not use_allowed(sender, Time.get_ticks_msec()):
+		return
+	var b := get_node_or_null(path) as Barricade
+	var p: Player = players.get(sender)
+	if b != null and p != null:
+		handle_repair(sender, b, p.position)
+
+## Local convenience (client or host): ask to repair `b`.
+func repair_local(b: Barricade) -> void:
+	if Net.is_host():
+		var me: Player = players.get(Net.local_id())
+		if me != null:
+			handle_repair(Net.local_id(), b, me.position)
+	else:
+		Net.send_reliable(self, &"request_repair", 1, [Net.local_id(), b.get_path()])
+
+## Host: one board back (Barricade.repair_one pays through board_repaired). True if a board was nailed.
+func handle_repair(peer: int, b: Barricade, pos: Vector3) -> bool:
+	var p: Player = players.get(peer)
+	if p == null or p.state != Player.ALIVE or not pos.is_finite():
+		return false
+	var at := b.global_position if b.is_inside_tree() else b.position
+	if Vector2(at.x - pos.x, at.z - pos.z).length() > REPAIR_REACH or absf(at.y - pos.y) > 3.0:
+		return false
+	if b.is_outside(pos):
+		return false                        # you repair from inside the lab
+	return b.repair_one(peer)
+
 # ---------------------------------------------------------------- loadout (clients learn a bought weapon / refill)
 
 func _send_loadout(peer: int) -> void:

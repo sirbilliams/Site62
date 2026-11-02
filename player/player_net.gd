@@ -25,25 +25,34 @@ var _tick := 0
 var _yaw := 0.0
 var _pitch := 0.0
 
+var input_enabled := true         # false while a menu or the lobby is up: frames carry no buttons or movement
+
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		_yaw -= e.relative.x * 0.002
-		_pitch = clampf(_pitch - e.relative.y * 0.002, -1.4, 1.4)
+		var k := 0.002 * Settings.mouse_sens
+		_yaw -= e.relative.x * k
+		_pitch = clampf(_pitch - e.relative.y * k, -1.4, 1.4)
 
+## The default input source: Settings actions (keyboard, mouse and gamepad).
 func _sample_keyboard() -> InputFrame:
 	var f := InputFrame.new()
-	f.move = Vector2(Input.get_axis(&"ui_left", &"ui_right"), Input.get_axis(&"ui_down", &"ui_up"))
-	if Input.is_key_pressed(KEY_A): f.move.x -= 1
-	if Input.is_key_pressed(KEY_D): f.move.x += 1
-	if Input.is_key_pressed(KEY_W): f.move.y += 1
-	if Input.is_key_pressed(KEY_S): f.move.y -= 1
-	f.move = f.move.limit_length(1.0)
-	if Input.is_key_pressed(KEY_SPACE): f.buttons |= InputFrame.JUMP
-	if Input.is_key_pressed(KEY_SHIFT): f.buttons |= InputFrame.SPRINT
-	if Input.is_key_pressed(KEY_CTRL): f.buttons |= InputFrame.CROUCH
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT): f.buttons |= InputFrame.FIRE
-	if Input.is_key_pressed(KEY_R): f.buttons |= InputFrame.RELOAD
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT): f.buttons |= InputFrame.ADS
+	f.look_yaw = _yaw
+	f.look_pitch = _pitch
+	if not input_enabled:
+		return f
+	Settings.ensure_actions()
+	f.move = Vector2(Input.get_axis(&"move_left", &"move_right"), Input.get_axis(&"move_back", &"move_forward")).limit_length(1.0)
+	var look := Vector2(Input.get_axis(&"look_left", &"look_right"), Input.get_axis(&"look_up", &"look_down"))
+	if look != Vector2.ZERO:                         # gamepad right stick, response curve for fine aim
+		var step := deg_to_rad(Settings.PAD_LOOK_DEG_S) * DT * Settings.mouse_sens
+		_yaw -= look.x * absf(look.x) * step
+		_pitch = clampf(_pitch - look.y * absf(look.y) * step, -1.4, 1.4)
+	var map := {&"jump": InputFrame.JUMP, &"sprint": InputFrame.SPRINT, &"crouch": InputFrame.CROUCH, &"fire": InputFrame.FIRE,
+		&"reload": InputFrame.RELOAD, &"ads": InputFrame.ADS, &"use": InputFrame.USE, &"melee": InputFrame.MELEE,
+		&"grenade": InputFrame.GRENADE, &"swap": InputFrame.NEXT_WEAPON}
+	for a in map:
+		if Input.is_action_pressed(a):
+			f.buttons |= map[a]
 	f.look_yaw = _yaw
 	f.look_pitch = _pitch
 	return f

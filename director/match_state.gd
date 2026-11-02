@@ -19,6 +19,9 @@ signal player_revived(peer: int, by: int)
 signal player_died(peer: int)
 signal player_respawned(peer: int)
 
+const VIEW_EVERY := 6                # physics ticks between revive messages (10 Hz)
+const VIEW_FRESH_MS := 700
+
 var net: PlayerNet
 var weapons: WeaponService
 var economy                          # EconomyService (or null: points come from Player.points)
@@ -29,6 +32,8 @@ var round := 0
 var stats := {}                      # host: peer -> {rounds, kills, downs, revives}
 var _down_t := {}                    # host: downed peer -> seconds since going down
 var _rev := {}                       # host: downed peer -> {by, t} (teammate revive in progress)
+var _view := {}                      # client: the latest revive message {downed, by, progress, bleed, at} (msec)
+var _ticks := 0
 
 func _ready() -> void:
 	name = "MatchState"
@@ -60,6 +65,7 @@ func reset() -> void:
 	stats.clear()
 	_down_t.clear()
 	_rev.clear()
+	_view = {}
 
 func tracked(peer: int) -> bool:
 	return stats.has(peer) or _down_t.has(peer) or _rev.has(peer)
@@ -91,6 +97,9 @@ func tick(dt: float) -> void:
 		if p2.state == Player.DOWN:
 			_tick_down(id, p2, dt, ids.size() == 1)
 	_check_game_over()
+	_ticks += 1
+	if _ticks % VIEW_EVERY == 0:
+		_send_views()
 
 ## Host: apply `dmg` (a source other than zombies; they lower hp directly and tick() notices).
 func damage(peer: int, dmg: float) -> void:
@@ -120,6 +129,60 @@ func on_round_started(r: int) -> void:
 		var p: Player = net.players[id]
 		if p.state == Player.DEAD:
 			_respawn(id, p)
+
+# ---------------------------------------------------------------- revive bars (HUD)
+
+## Fraction (0..1) of the bleed-out time a downed `peer` has left (host).
+func bleed_left_of(peer: int) -> float:
+	if not _down_t.has(peer):
+		return 0.0
+	return LifeRules.bleedout_left(_down_t[peer]) / maxf(Content.balance.downed_bleedout_s, 0.001)
+
+## Host: tell each downed player, and whoever is reviving them, the progress (unreliable, 10 Hz). The host
+## itself reads _rev directly in view_for.
+func _send_views() -> void:
+	for id in _down_t.keys():
+		var by: int = _rev[id].by if _rev.has(id) else 0
+		var msg := [id, by, revive_progress_of(id), bleed_left_of(id)]
+		if id != Net.local_id():
+			Net.send_unreliable(self, &"_rx_revive", id, msg)
+		if by != 0 and by != id and by != Net.local_id():
+			Net.send_unreliable(self, &"_rx_revive", by, msg)
+
+@rpc("authority", "unreliable")
+func _rx_revive(downed, by, progress, bleed) -> void:
+	if Net.is_host():
+		return
+	apply_revive(downed, by, progress, bleed)
+
+## Client (and tests): take one revive message.
+func apply_revive(downed, by, progress, bleed) -> void:
+	if typeof(downed) != TYPE_INT or typeof(by) != TYPE_INT:
+		return
+	for v in [progress, bleed]:
+		if not (typeof(v) == TYPE_FLOAT or typeof(v) == TYPE_INT) or not is_finite(float(v)):
+			return
+	_view = {"downed": downed, "by": by, "progress": clampf(float(progress), 0.0, 1.0),
+		"bleed": clampf(float(bleed), 0.0, 1.0), "at": Time.get_ticks_msec()}
+
+## What the HUD shows for `peer`: {role: "downed" | "reviver" | "", other: peer id (0 none), progress, bleed}.
+## "downed": my own bars (bleed-out left, revive progress by `other`). "reviver": I am reviving `other`.
+func view_for(peer: int) -> Dictionary:
+	if not _view.is_empty() and Time.get_ticks_msec() - int(_view.at) <= VIEW_FRESH_MS:
+		if _view.downed == peer:
+			return {"role": "downed", "other": _view.by, "progress": _view.progress, "bleed": _view.bleed}
+		if _view.by == peer and _view.by != _view.downed:
+			return {"role": "reviver", "other": _view.downed, "progress": _view.progress, "bleed": _view.bleed}
+	if _down_t.has(peer):
+		var by: int = _rev[peer].by if _rev.has(peer) else 0
+		var prog := revive_progress_of(peer)
+		if by == 0 and _ids().size() == 1:
+			prog = LifeRules.self_revive_progress(_down_t[peer], Game.suds_of(peer), true)
+		return {"role": "downed", "other": by, "progress": prog, "bleed": bleed_left_of(peer)}
+	for d in _rev:
+		if _rev[d].by == peer and d != peer:
+			return {"role": "reviver", "other": d, "progress": revive_progress_of(d), "bleed": bleed_left_of(d)}
+	return {"role": "", "other": 0, "progress": 0.0, "bleed": 0.0}
 
 # ---------------------------------------------------------------- transitions (host)
 

@@ -35,6 +35,7 @@ extends Resource
 @export var barricade_boards: int = 6
 @export var use_range: float = 2.0
 @export var use_min_interval_s: float = 0.1
+@export var interact_hold_s: float = 0.35
 @export var repath_s: float = 0.5
 @export var swap_s: float = 0.4
 @export var melee_range: float = 1.6

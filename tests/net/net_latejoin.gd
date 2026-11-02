@@ -2,6 +2,8 @@ extends Node3D
 ## Multi-process late-join test (--rtt_ms/--loss on every process). Roles: host | a | b | d (d joins last).
 ## Staged mid-match: round 3 playing, power on, doors D1 + D2 open (zones b, c), D3 closed, barricades 2/0 boards,
 ## crate moved (spot 2 active, 2 uses), a holds a Suds + a second gun + 700 points, live pickup, active Overload.
+## Late join handshake: a client sends `ready` (WorldSnapshot.announce_ready) once its scene is built; the host
+## sends the snapshot and live zombies only then (nothing on player_joined).
 ##  1. d joins: every replicated field of d equals the host's (same _view() on both), d is a spectator (DEAD, start
 ##     points), the doors are open on d (collision gone, nav link on, zones open), nothing was sent twice.
 ##  2. A spectator does not count for game over: host, a, b go down -> game over with d connected.
@@ -77,6 +79,8 @@ func _ready() -> void:
 		ws = WorldSnapshot.new()
 		add_child(ws)
 		ws.bind(net, svc, eco, zs, pu, mt, ms)
+		if role != "host":                          # the handshake: scene built and bound, now ask for the world
+			Net.session_ready.connect(ws.announce_ready)
 	Net.player_left.connect(func(id):
 		if id == 1 and not done:
 			done = true
@@ -198,7 +202,7 @@ func _view(who: int) -> Dictionary:
 	picks.sort()
 	return {"round": mt.round, "phase": String(mt.phase), "power": Game.power, "doors": door_list, "zones": zones_open,
 		"crates": crates, "boards": boards, "players": players, "active": act, "picks": picks,
-		"kit": svc.kit_args(who).slice(0, 5), "drops": drops_seen}
+		"kit": svc.kit_args(who).slice(0, 5), "drops": drops_seen, "zombies": zs.live_count()}
 
 func _stage() -> void:
 	var a: int = ids["a"]
@@ -222,6 +226,8 @@ func _stage() -> void:
 	eco.wallet(a).points = 700
 	pu.force_drop(&"max_ammo", Vector3(30, 0.5, 30))
 	pu.collect(&"overload", 1)
+	zs.spawn(Vector3(5, 0.2, 5), &"shambler", 100.0, 0)        # a live zombie the joiner must get after `ready`
+	zs.spawn(Vector3(8, 0.2, 5), &"shambler", 100.0, 0)
 	print("LATEJOIN STAGED")
 
 func _script() -> void:
@@ -255,6 +261,7 @@ func _script() -> void:
 	if not _ck(got["picks"].size() == 1 and got["active"] == ["overload"] and got["crates"][1][1] and got["crates"][1][2] == 2, "pickup / overload / crate on d"): return
 	if not _ck(got["boards"][0][1] == 2 and got["boards"][1][1] == 0 and got["boards"][1][2], "boards on d: " + str(got["boards"])): return
 	if not _ck(got["drops"] == 1, "d saw the pickup once (%d)" % got["drops"]): return
+	if not _ck(got["zombies"] == 2, "d got the 2 live zombies after ready (%s)" % str(got["zombies"])): return
 	print("LATEJOIN step 1 ok")
 	# 2: the spectator is not counted for game over
 	if not _ck(pd.state == Player.DEAD and not ms.game_over, "d spectates, no game over"): return

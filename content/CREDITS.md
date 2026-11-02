@@ -129,3 +129,12 @@
 Poly Haven licence: all assets on polyhaven.com are CC0 (https://polyhaven.com/license). Downloaded from the
 official Poly Haven API (textures: 1k JPG diffuse + GL normal maps; models: 1k glTF with their textures); no scripts or executables were used.
 Quaternius / Kenney packs were not used (kenney.nl refuses scripted downloads). Remaining set dressing (benches, signs, lights, Suds machines) is modelled in code (tools/build_site62.gd) and is original.
+
+## UI fonts (SIL Open Font License 1.1)
+
+| File | Font | Author | Source | Licence |
+|---|---|---|---|---|
+| ui/fonts/StardosStencil-Bold.ttf | Stardos Stencil Bold | Vernon Adams (Stardos Stencil project authors) | https://github.com/google/fonts/tree/main/ofl/stardosstencil (Google Fonts) | OFL 1.1 (ui/fonts/OFL-stardosstencil.txt) |
+| ui/fonts/ShareTechMono-Regular.ttf | Share Tech Mono | Ralph du Carrois (Carrois Type Design) | https://github.com/google/fonts/tree/main/ofl/sharetechmono (Google Fonts) | OFL 1.1 (ui/fonts/OFL-sharetechmono.txt) |
+
+Menu and HUD artwork (Suds icons, stripes, CRT overlay) is drawn in code (ui/ui_theme.gd) and is original.

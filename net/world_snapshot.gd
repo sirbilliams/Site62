@@ -1,7 +1,9 @@
 class_name WorldSnapshot
 extends Node
 ## Late join: the host sends a player who joins mid-match the full current state in ONE reliable message.
-## It is the only late join path (the services no longer resync on player_joined themselves):
+## It is the only late join path (the services no longer resync on player_joined themselves). The joiner first loads
+## the game scene and builds its services, THEN sends a `ready` RPC (announce_ready); only that triggers the
+## snapshot and ZombieSync's live zombies, so nothing is sent to a node that does not exist yet:
 ##  - round and phase (Match), power, every Suds and voucher (Game), open zones and bulkhead doors,
 ##    barricade boards, the Requisition Crate (active spot, uses), live power-ups and active timed effects,
 ##    and per player: points, life state, hp, kit (Inventory as in WeaponService.send_kit).
@@ -18,15 +20,12 @@ var zombies: ZombieSync
 var powerups: PowerupService
 var match_node: Match
 var life: MatchState
+var _ready_peers := {}                  # host: peers that completed the handshake
 var _pending := {}                      # client: peer -> {points, state, hp} not yet applied (Player not spawned yet)
 
 func _ready() -> void:
 	name = "WorldSnapshot"
-	Net.player_joined.connect(_on_player_joined)
-
-func _exit_tree() -> void:
-	if Net.player_joined.is_connected(_on_player_joined):
-		Net.player_joined.disconnect(_on_player_joined)
+	Net.player_left.connect(func(id): _ready_peers.erase(id))
 
 func bind(pn: PlayerNet, svc: WeaponService, eco: EconomyService, zs: ZombieSync, pu: PowerupService, mt: Match, ms: MatchState) -> void:
 	net = pn
@@ -39,12 +38,27 @@ func bind(pn: PlayerNet, svc: WeaponService, eco: EconomyService, zs: ZombieSync
 
 # ---------------------------------------------------------------- host
 
-func _on_player_joined(id: int) -> void:
-	if not Net.is_host() or id == Net.local_id():
+## Client: my game scene is built and bound; ask the host for the world.
+func announce_ready() -> void:
+	if Net.is_host():
 		return
+	Net.send_reliable(self, &"_rx_ready", 1, [])
+
+@rpc("any_peer", "reliable")
+func _rx_ready() -> void:
+	if Net.is_host():
+		on_ready(multiplayer.get_remote_sender_id())
+
+## Host: peer `id` finished loading. Its spectator status, the world snapshot and the live zombies, once.
+func on_ready(id: int) -> void:
+	if not Net.is_host() or id == Net.local_id() or not Net.players.has(id) or _ready_peers.has(id):
+		return
+	_ready_peers[id] = true
 	if match_node != null and match_node.running and life != null and net != null and net.ensure_player(id) != null:
 		life.spectate(id)
 	Net.send_reliable(self, &"_rx_snapshot", id, [capture()])
+	if zombies != null:
+		zombies.send_live_to(id)
 
 ## The whole world state as plain data.
 func capture() -> Dictionary:

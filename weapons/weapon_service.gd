@@ -20,7 +20,7 @@ const BUCKET_MAX := 12.0                 # request flood limit per peer (burst)
 const BUCKET_REFILL := 30.0              # requests per second
 const SKIN := 0.05
 const AMMO_SYNC_EVERY := 30             # physics ticks (0.5 s)
-const BASE_FOV := 75.0
+const BASE_FOV := 75.0                    # default; the player setting is Settings.fov
 const FOV_RATE := 14.0
 const SWAP_TOL := 0.25                   # fraction of swap_s forgiven for network jitter
 
@@ -210,7 +210,7 @@ func _process(dt: float) -> void:
 	var me := net.local_player() if net != null else null
 	if me != null and me.camera != null:
 		var st := state_for(Net.local_id())
-		var target := st.data.ads_fov if (net.local_buttons & InputFrame.ADS) else BASE_FOV
+		var target := st.data.ads_fov * Settings.fov / BASE_FOV if (net.local_buttons & InputFrame.ADS) else Settings.fov
 		me.camera.fov = lerpf(me.camera.fov, target, 1.0 - exp(-FOV_RATE * dt))
 	if Net.is_host() or dummy == null or _dummy_buf.is_empty():
 		return

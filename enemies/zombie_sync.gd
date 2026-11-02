@@ -134,7 +134,12 @@ func _remove(zid: int) -> void:
 func _on_player_joined(id: int) -> void:
 	if not Net.is_host():
 		return
-	_hook_barricades()           # the boards reach a joiner through the WorldSnapshot
+	_hook_barricades()           # the boards reach a joiner through the WorldSnapshot, the zombies through send_live_to
+
+## Host: the live zombies, to a joiner that finished loading (WorldSnapshot's `ready` handshake calls this).
+func send_live_to(id: int) -> void:
+	if not Net.is_host():
+		return
 	for z: Zombie in zombies.values():
 		if z.alive:
 			Net.send_reliable(self, &"_rx_spawn", id, [z.zid, z.position, String(z.data.id), z.band])

@@ -47,6 +47,17 @@ func setup(id: int, bal: Balance, local: bool) -> void:
 	col.shape = cap
 	col.position.y = 0.9
 	add_child(col)
+	if not local:                # teammates are visible as an amber capsule until real character art arrives
+		var mi := MeshInstance3D.new()
+		var cm := CapsuleMesh.new()
+		cm.radius = Motor.BODY_RADIUS
+		cm.height = 1.8
+		mi.mesh = cm
+		mi.position.y = 0.9
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.9, 0.62, 0.2)
+		mi.material_override = mat
+		add_child(mi)
 	if local:
 		camera = Camera3D.new()
 		camera.position.y = EYE_HEIGHT
