@@ -31,8 +31,9 @@ func configure_from_args() -> void:
 func pending() -> int:
 	return _queue.size()
 
-func submit(send: Callable) -> void:
-	if loss > 0.0 and _rng.randf() < loss:
+## `lossy` false = reliable channel: delayed like everything else but never dropped.
+func submit(send: Callable, lossy := true) -> void:
+	if lossy and loss > 0.0 and _rng.randf() < loss:
 		return
 	_queue.append([Time.get_ticks_msec() + rtt_ms * 0.5, send])
 

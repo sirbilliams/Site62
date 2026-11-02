@@ -2,21 +2,23 @@ class_name ClockSync
 extends RefCounted
 ## Host-side per-peer clock model. Converts a client clock stamp into the host time of the world
 ## the shooter was looking at (for lag compensation).
-## Input frame sample = client_t - host_recv = offset - one_way_delay; the max over a window is the
+## Input frame sample = client_t - host_recv = offset - one_way_delay; the max (slowly decaying) is the
 ## least-delayed frame, then + rtt/2 gives the offset.
 
-const WINDOW := 120
+const DECAY := 0.01       # per-sample pull toward a worse (more delayed) sample
 const MAX_REWIND := 0.25
 
-var _samples := {}    # id -> Array[float]
+var _est := {}        # id -> float estimate of (client_t - host_recv) at the least delay
 var _rtt := {}        # id -> float (seconds)
 
+## A faster sample (less delay) replaces the estimate at once; slower ones only pull it slowly,
+## so the estimate never jumps when the best sample would otherwise age out of a window.
 func observe(id: int, client_t: float, host_now: float) -> void:
-	var a: Array = _samples.get(id, [])
-	a.append(client_t - host_now)
-	if a.size() > WINDOW:
-		a.pop_front()
-	_samples[id] = a
+	var v := client_t - host_now
+	if not _est.has(id) or v >= _est[id]:
+		_est[id] = v
+	else:
+		_est[id] = lerpf(_est[id], v, DECAY)
 
 func set_rtt(id: int, rtt: float) -> void:
 	_rtt[id] = rtt
@@ -25,21 +27,17 @@ func rtt(id: int) -> float:
 	return _rtt.get(id, 0.0)
 
 func forget(id: int) -> void:
-	_samples.erase(id)
+	_est.erase(id)
 	_rtt.erase(id)
 
 func has(id: int) -> bool:
-	return not _samples.get(id, []).is_empty()
+	return _est.has(id)
 
 ## client clock - host clock.
 func offset(id: int) -> float:
-	var a: Array = _samples.get(id, [])
-	if a.is_empty():
+	if not _est.has(id):
 		return 0.0
-	var best: float = a[0]
-	for v in a:
-		best = maxf(best, v)
-	return best + rtt(id) * 0.5
+	return _est[id] + rtt(id) * 0.5
 
 ## Host time of the world state the shooter saw when stamping `client_t`:
 ## fire time on the host clock, minus snapshot transit (rtt/2), minus the view interpolation delay.

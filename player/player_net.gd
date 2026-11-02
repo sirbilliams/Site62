@@ -16,6 +16,7 @@ var spawn := Vector3(0, 0.2, 0)
 var input_source := Callable()   # () -> InputFrame (move/buttons/look); default samples the keyboard
 var local_buttons := 0           # buttons of the last local frame (weapon service reads FIRE/RELOAD)
 var clock := ClockSync.new()     # host: per-peer client clock model
+var last_buttons := {}            # host: peer id -> buttons of the latest applied frame
 var _seq := 0
 var _recent: Array = []          # last BATCH sent frames as arrays
 var _last_seq := {}              # host: peer id -> last applied seq
@@ -42,6 +43,7 @@ func _sample_keyboard() -> InputFrame:
 	if Input.is_key_pressed(KEY_CTRL): f.buttons |= InputFrame.CROUCH
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT): f.buttons |= InputFrame.FIRE
 	if Input.is_key_pressed(KEY_R): f.buttons |= InputFrame.RELOAD
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT): f.buttons |= InputFrame.ADS
 	f.look_yaw = _yaw
 	f.look_pitch = _pitch
 	return f
@@ -75,6 +77,12 @@ func _sync_roster() -> void:
 			_last_seq.erase(id)
 			_credit.erase(id)
 			clock.forget(id)
+			last_buttons.erase(id)
+
+## Nudge the local look direction (recoil kick and its recovery), radians.
+func add_look(dyaw: float, dpitch: float) -> void:
+	_yaw += dyaw
+	_pitch = clampf(_pitch + dpitch, -1.4, 1.4)
 
 func local_player() -> Player:
 	return players.get(Net.local_id())
@@ -136,6 +144,7 @@ func _apply_batch(id: int, batch: Array) -> int:
 		credit -= 1.0
 		p.simulate(f, _space(), DT, false)
 		clock.observe(id, f.t, Time.get_ticks_msec() / 1000.0)
+		last_buttons[id] = f.buttons
 		last = f.seq
 		applied += 1
 	_last_seq[id] = last

@@ -16,6 +16,7 @@ var hits: Array = []              # [shooter, target, dmg, head]
 var reasons := {}                 # reason -> count
 var body_live_gap := 0.0          # |live dummy x - rewound x| at the body hit
 var finish_t := -1.0
+var client_ammo: Array = []       # what the client believes at the end
 # client (a)
 var phase := "wait"
 var phase_t := 0.0
@@ -56,7 +57,11 @@ func _ready() -> void:
 	add_child(wall)
 	net = PlayerNet.new()
 	net.name = "PlayerNet"
-	net.input_source = func(): return InputFrame.new()
+	net.input_source = func():
+		var f := InputFrame.new()
+		if role == "a":
+			f.buttons = InputFrame.ADS       # tight cone so the aimed shots are deterministic enough
+		return f
 	add_child(net)
 	svc = WeaponService.new()
 	svc.name = "WeaponService"
@@ -109,7 +114,11 @@ func _host_check() -> void:
 	for r in [&"sender", &"rate", &"los", &"ammo"]:
 		if not reasons.has(r):
 			return
-	if body.is_empty() or head.is_empty():
+	if body.is_empty() or head.is_empty() or client_ammo.is_empty():
+		return
+	var hs := svc.state_for(hits[0][0])
+	if client_ammo != [hs.mag, hs.reserve]:
+		_fail("client ammo %s != host [%d, %d]" % [str(client_ammo), hs.mag, hs.reserve])
 		return
 	if hits.any(func(h): return h[0] == 1):
 		_fail("host shot attributed to wrong shooter")
@@ -123,7 +132,7 @@ func _host_check() -> void:
 	if rtt_ms >= 100.0 and body_live_gap < 0.3:
 		_fail("lag compensation not exercised: live/rewound gap only %.2f m" % body_live_gap)
 		return
-	print("SHOOT host ok: hits=%d reasons=%s gap=%.2f" % [hits.size(), str(reasons), body_live_gap])
+	print("SHOOT host ok: hits=%d reasons=%s gap=%.2f ammo=%s" % [hits.size(), str(reasons), body_live_gap, str(client_ammo)])
 	finish_t = t
 
 # ------------------------------------------------------------------ client
@@ -150,62 +159,86 @@ func _client_step() -> void:
 		"wait":
 			if ready and t > 4.0:       # clock model + rtt need a few seconds
 				_go("body")
-		"body", "head":
-			var off := Vector3(0, 0.8, 0) if phase == "body" else Vector3(0, 1.8, 0)
-			var tol := 0.3 if phase == "body" else 0.12
-			if not sent:
+		"body", "nocomp", "head":
+			var off := Vector3(0, 1.8, 0) if phase == "head" else Vector3(0, 0.8, 0)
+			var tol := 0.1 if phase == "head" else 0.25
+			if phase == "nocomp" and not lag_off:
+				lag_off = true
+				_set_lag.rpc_id(1, false)       # negative control: same shot, no rewind
+				phase_t = t + 0.3
+			elif not sent:
 				if age > 0.0 and absf(_dummy_x()) < tol and svc.fire_local(_aim_at(off)):
 					_sent()
 			elif got:
-				if result.kind == WeaponService.HIT and result.head == (phase == "head"):
-					_go("head" if phase == "body" else "sender")
+				if phase == "nocomp":
+					if result.kind == WeaponService.HIT:
+						_fail("lagged shot HIT with lag_comp=false (control invalid)")
+						return
+					_set_lag.rpc_id(1, true)
+					nocomp_missed = true
+					_go("head")
+				elif result.kind == WeaponService.HIT and result.head == (phase == "head"):
+					_go("nocomp" if phase == "body" else "sender")
 				else:
-					_retry(0.4)                # miss or wrong part: wait a bit, retry
-			elif age > 1.6:
-				_retry(0.0)                    # verdict lost
+					_retry(0.4)                # aimed shot missed (lag/spread): try again
 		"sender":
 			if not sent:
-				svc.request_fire.rpc_id(1, 1, svc.eye_of(me), Vector3.UP, WeaponService.now_s())
+				svc.request_fire.rpc_id(1, 1, svc.eye_of(me), Vector3.UP, WeaponService.now_s(), 0)
 				_sent()
 			elif got and result.reason == &"sender":
 				_go("rate")
-			elif got or age > 1.0:
+			elif got:
 				_retry(0.0)
 		"rate":
 			if not sent:
 				if age > 0.5:
 					for i in 3:      # raw requests: a cheating client skips its own rate limit
-						svc.request_fire.rpc_id(1, Net.local_id(), svc.eye_of(me), Vector3.UP, WeaponService.now_s())
+						svc.request_fire.rpc_id(1, Net.local_id(), svc.eye_of(me), Vector3.UP, WeaponService.now_s(), 0)
 					_sent()
 					results_seen.clear()
 			elif results_seen.any(func(r): return r.reason == &"rate"):
 				_go("wall")
-			elif age > 1.5:
-				_retry(0.0)
 		"wall":
 			if not refilled:
 				refilled = true
 				_refill_host.rpc_id(1)
 				phase_t = t
 			elif not sent:
-				svc.state_for(Net.local_id()).refill()       # mirror of the host refill
 				if age > 0.5 and _dummy_x() > 7.0 and _dummy_x() < 9.5 and svc.fire_local(_aim_at(Vector3(0, 0.8, 0))):
 					_sent()
 			elif got and result.reason == &"los":
 				_go("empty")
-			elif got or age > 1.6:
+			elif got:
 				_retry(0.0)
 		"empty":
-			if age > 0.4:
+			var st := svc.state_for(Net.local_id())
+			if st.mag > 0:
+				if age > 0.4:                              # honest spaced shots until the mag is dry
+					phase_t = t
+					svc.fire_local(Vector3.UP)
+			elif not sent:
+				# the client's own state now blocks firing, so a cheater's raw request tests the host
+				svc.request_fire.rpc_id(1, Net.local_id(), svc.eye_of(me), Vector3.UP, WeaponService.now_s(), 0)
+				_sent()
+				results_seen.clear()
+			elif results_seen.any(func(r): return r.reason == &"ammo"):
+				_go("heal")
+		"heal":
+			if not healed:
+				healed = true                              # host ammo changes behind the client's back
+				_refill_host.rpc_id(1)
 				phase_t = t
-				svc.state_for(Net.local_id()).refill()       # keep sending so the host can say "ammo"
-				svc.fire_local(Vector3.UP)
-			if results_seen.any(func(r): return r.reason == &"ammo"):
+			elif age > 1.5:                                  # > one ammo-sync period with nothing in flight
+				var st := svc.state_for(Net.local_id())
+				_report_ammo.rpc_id(1, st.mag, st.reserve)
 				reported = true
-				print("SHOOT NET CLIENT DONE (a)")
+				print("SHOOT NET CLIENT DONE (a) mag=%d reserve=%d" % [st.mag, st.reserve])
 				phase = "finished"
 
 var sent := false
+var lag_off := false
+var healed := false
+var nocomp_missed := false
 var refilled := false
 
 func _sent() -> void:
@@ -217,6 +250,16 @@ func _retry(delay: float) -> void:
 	sent = false
 	result = {}
 	phase_t = t + delay
+
+@rpc("any_peer", "reliable")
+func _set_lag(on: bool) -> void:
+	if Net.is_host():
+		svc.lag_comp = on
+
+@rpc("any_peer", "reliable")
+func _report_ammo(mag: int, reserve: int) -> void:
+	if Net.is_host():
+		client_ammo = [mag, reserve]
 
 @rpc("any_peer", "reliable")
 func _refill_host() -> void:

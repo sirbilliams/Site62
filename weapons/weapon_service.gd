@@ -17,6 +17,9 @@ const PING_EVERY := 30                   # physics ticks
 const BUCKET_MAX := 12.0                 # request flood limit per peer (burst)
 const BUCKET_REFILL := 30.0              # requests per second
 const SKIN := 0.05
+const AMMO_SYNC_EVERY := 30             # physics ticks (0.5 s)
+const BASE_FOV := 75.0
+const FOV_RATE := 14.0
 
 var net: PlayerNet
 var history := HitHistory.new()
@@ -30,6 +33,12 @@ var _bucket := {}                        # peer id -> [tokens, last_msec]
 var _tick := 0
 var _dummy_buf: Array = []               # client: [recv_msec, pos]
 var _semi_held := false
+var recoil: Recoil                       # local player's camera kick
+var _shot_seq := 0                       # client: shots sent (host counts the same requests itself)
+var _inflight := 0                       # client: shots sent whose verdict has not arrived
+var _counters := {}                      # host: peer id -> requests received (spread seed)
+var _pings := {}                         # host: nonce -> [sent_s, {peer: true} answered]
+var _nonce := 0
 
 func _ready() -> void:
 	name = "WeaponService"
@@ -64,6 +73,8 @@ func set_weapon(peer: int, weapon_id: StringName) -> bool:
 	if d == null:
 		return false
 	states[peer] = WeaponState.new(d)
+	if peer == Net.local_id():
+		recoil = Recoil.new(d.recoil)
 	return true
 
 func state_for(peer: int) -> WeaponState:
@@ -84,6 +95,7 @@ func _physics_process(_dt: float) -> void:
 	_local_input()
 
 func _host_tick() -> void:
+	_recover_recoil()
 	var now := now_s()
 	if dummy != null:
 		dummy.position = TargetDummy.pos_at(now)
@@ -93,7 +105,15 @@ func _host_tick() -> void:
 	if _tick % SNAP_EVERY == 0 and dummy != null:
 		Net.send_unreliable(self, &"_rx_dummy", 0, [DUMMY_ID, dummy.position])
 	if _tick % PING_EVERY == 0:
-		Net.send_unreliable(self, &"_rx_ping", 0, [now])
+		_nonce += 1
+		_pings[_nonce] = [now, {}]
+		_pings.erase(_nonce - 8)
+		Net.send_unreliable(self, &"_rx_ping", 0, [_nonce])
+	if _tick % AMMO_SYNC_EVERY == 0:
+		for id in net.players:
+			if id != Net.local_id():
+				var ws := state_for(id)
+				Net.send_reliable(self, &"_rx_ammo", id, [ws.mag, ws.reserve])
 	for st in states.values():
 		(st as WeaponState).update(now)
 
@@ -101,8 +121,21 @@ func _client_tick() -> void:
 	var st: WeaponState = states.get(Net.local_id())
 	if st != null:
 		st.update(now_s())
+	_recover_recoil()
 
-func _process(_dt: float) -> void:
+func _recover_recoil() -> void:
+	if recoil == null or net == null:
+		return
+	var back := recoil.recover(1.0 / 60.0)
+	if back != Vector2.ZERO:
+		net.add_look(deg_to_rad(back.x), -deg_to_rad(back.y))
+
+func _process(dt: float) -> void:
+	var me := net.local_player() if net != null else null
+	if me != null and me.camera != null:
+		var st := state_for(Net.local_id())
+		var target := st.data.ads_fov if (net.local_buttons & InputFrame.ADS) else BASE_FOV
+		me.camera.fov = lerpf(me.camera.fov, target, 1.0 - exp(-FOV_RATE * dt))
 	if Net.is_host() or dummy == null or _dummy_buf.is_empty():
 		return
 	var rt := Time.get_ticks_msec() - Player.INTERP_DELAY_MS
@@ -139,7 +172,9 @@ func eye_of(p: Player) -> Vector3:
 
 # ---------------------------------------------------------------- client side
 
-## Fire the local player's weapon along `dir` (unit). Returns false if the local state blocks it.
+## Fire the local player's weapon along `dir` (unit; the camera look, which includes recoil kick).
+## Returns false if the local state blocks it. Spread is applied here only for the local visuals;
+## the host re-derives the same offset from (shooter, request count) and never takes one from the client.
 func fire_local(dir: Vector3) -> bool:
 	var me := net.local_player()
 	if me == null:
@@ -149,28 +184,36 @@ func fire_local(dir: Vector3) -> bool:
 	if not st.fire(t):
 		return false
 	var origin := eye_of(me)
-	var end := origin + dir * balance().max_shot_range
+	var seq := _peek_seq(Net.local_id()) if Net.is_host() else _shot_seq
+	var ads := (net.local_buttons & InputFrame.ADS) != 0
+	var aim := Spread.offset_dir(dir, Spread.cone_deg(st.data, ads), Net.local_id(), seq)
+	var end := origin + aim * balance().max_shot_range
 	var space := get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(origin, end, 1 | HitTarget.LAYER_HITBOX)
 	var r := space.intersect_ray(q)
 	if not r.is_empty():
 		end = r.position
-	view.muzzle_flash(origin + dir * 0.6)
-	view.tracer(origin + dir * 0.6, end)
+	view.muzzle_flash(origin + aim * 0.6)
+	view.tracer(origin + aim * 0.6, end)
 	if not r.is_empty() and r.collider is StaticBody3D and (r.collider as Node).has_meta(&"target_id"):
 		var tgt = targets.get((r.collider as Node).get_meta(&"target_id"))
 		var head: bool = tgt != null and tgt.is_head_shape(r.shape)
 		view.predicted_marker(t, r.position, head)
+	if recoil != null:
+		var k := recoil.kick(t)
+		net.add_look(deg_to_rad(k.x), deg_to_rad(k.y))
 	if Net.is_host():
-		handle_fire(Net.local_id(), Net.local_id(), origin, dir, t)
+		handle_fire(Net.local_id(), Net.local_id(), origin, dir, t, _next_seq(Net.local_id()))
 	else:
-		Net.send_unreliable(self, &"request_fire", 1, [Net.local_id(), origin, dir, t])
+		_shot_seq += 1
+		_inflight += 1
+		Net.send_reliable(self, &"request_fire", 1, [Net.local_id(), origin, dir, t, seq])
 	return true
 
 func reload_local() -> void:
 	var st := state_for(Net.local_id())
 	if st.start_reload(now_s()) and not Net.is_host():
-		Net.send_unreliable(self, &"request_reload", 1, [])
+		Net.send_reliable(self, &"request_reload", 1, [])
 
 @rpc("authority", "unreliable")
 func _rx_dummy(id: int, pos: Vector3) -> void:
@@ -185,33 +228,50 @@ func _rx_dummy(id: int, pos: Vector3) -> void:
 		_dummy_buf.pop_front()
 
 @rpc("authority", "unreliable")
-func _rx_ping(host_t: float) -> void:
+func _rx_ping(nonce: int) -> void:
 	if Net.is_host():
 		return
-	Net.send_unreliable(self, &"_rx_pong", 1, [host_t])
+	Net.send_unreliable(self, &"_rx_pong", 1, [nonce])
 
+## Only a pong that answers a ping the host really sent, once per peer, counts.
 @rpc("any_peer", "unreliable")
-func _rx_pong(host_t) -> void:
-	if not Net.is_host() or not _num(host_t):
+func _rx_pong(nonce) -> void:
+	if not Net.is_host() or typeof(nonce) != TYPE_INT or not _pings.has(nonce):
 		return
 	var id := multiplayer.get_remote_sender_id()
-	var rtt := now_s() - float(host_t)
+	var p: Array = _pings[nonce]
+	if id == 0 or not net.players.has(id) or p[1].has(id):
+		return
+	p[1][id] = true
+	var rtt := now_s() - float(p[0])
 	if rtt <= 0.0 or rtt > 2.0:
 		return
 	var old := net.clock.rtt(id)
 	net.clock.set_rtt(id, rtt if old == 0.0 else lerpf(old, rtt, 0.2))
 
 ## Host verdict for one of my shots. kind: MISS | HIT | REJECTED.
-@rpc("authority", "unreliable")
+@rpc("authority", "reliable")
 func _rx_result(t: float, kind: int, reason: String, mag: int, reserve: int, target: int, dmg: float, headshot: bool) -> void:
 	if Net.is_host():
 		return
-	var st := state_for(Net.local_id())
-	if kind == REJECTED:
-		st.mag = mag                         # host is authoritative for ammo
-		st.reserve = reserve
+	_inflight = maxi(_inflight - 1, 0)
+	_apply_host_ammo(mag, reserve)
 	view.resolve(t, kind == HIT)
 	result_received.emit(t, kind, StringName(reason), target, dmg, headshot)
+
+## The host is authoritative for ammo; shots still in flight are subtracted so the display never flickers.
+func _apply_host_ammo(mag: int, reserve: int) -> void:
+	var st := state_for(Net.local_id())
+	if st.reloading:
+		return                               # the local reload will land on the same numbers
+	st.mag = maxi(mag - _inflight, 0)
+	st.reserve = reserve
+
+@rpc("authority", "reliable")
+func _rx_ammo(mag: int, reserve: int) -> void:
+	if Net.is_host() or _inflight > 0:
+		return
+	_apply_host_ammo(mag, reserve)
 
 # ---------------------------------------------------------------- host side
 
@@ -221,8 +281,8 @@ static func _num(v) -> bool:
 static func _vec(v) -> bool:
 	return typeof(v) == TYPE_VECTOR3 and (v as Vector3).is_finite()
 
-@rpc("any_peer", "unreliable")
-func request_fire(shooter, origin, dir, t) -> void:
+@rpc("any_peer", "reliable")
+func request_fire(shooter, origin, dir, t, _client_seq = 0) -> void:
 	if not Net.is_host():
 		return
 	var sender := multiplayer.get_remote_sender_id()
@@ -230,15 +290,16 @@ func request_fire(shooter, origin, dir, t) -> void:
 		return                               # a local call is not a request
 	if not _take_token(sender):
 		return                               # flood: dropped silently
+	var seq := _next_seq(sender)           # the host counts requests itself; the client's seq is ignored
 	if not (_vec(origin) and _vec(dir) and _num(t)):
 		_reject(sender, &"malformed", t if _num(t) else 0.0)
 		return
 	if typeof(shooter) != TYPE_INT or not Net.sender_is(shooter):
 		_reject(sender, &"sender", float(t))
 		return
-	handle_fire(sender, shooter, origin, dir, float(t))
+	handle_fire(sender, shooter, origin, dir, float(t), seq)
 
-@rpc("any_peer", "unreliable")
+@rpc("any_peer", "reliable")
 func request_reload() -> void:
 	if not Net.is_host():
 		return
@@ -246,6 +307,14 @@ func request_reload() -> void:
 	if sender == 0 or not _take_token(sender) or not net.players.has(sender):
 		return
 	state_for(sender).start_reload(now_s())
+
+func _peek_seq(peer: int) -> int:
+	return _counters.get(peer, 0)
+
+func _next_seq(peer: int) -> int:
+	var n: int = _counters.get(peer, 0)
+	_counters[peer] = n + 1
+	return n
 
 func _take_token(peer: int) -> bool:
 	var now := Time.get_ticks_msec()
@@ -268,10 +337,10 @@ func _reply(peer: int, t: float, kind: int, reason: StringName, target: int, dmg
 		view.resolve(t, kind == HIT)
 		result_received.emit(t, kind, reason, target, dmg, head)
 		return
-	Net.send_unreliable(self, &"_rx_result", peer, [t, kind, String(reason), st.mag, st.reserve, target, dmg, head])
+	Net.send_reliable(self, &"_rx_result", peer, [t, kind, String(reason), st.mag, st.reserve, target, dmg, head])
 
 ## Validate and resolve one shot. `t` is the shooter's client clock stamp (host's own clock for the host).
-func handle_fire(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float) -> void:
+func handle_fire(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float, seq: int) -> void:
 	if not Net.is_host():
 		return
 	if shooter != sender:
@@ -300,6 +369,8 @@ func handle_fire(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: fl
 		_reject(sender, reason, t)
 		return
 	ws.fire(_fire_clock(sender, t, now), mult)
+	var ads: bool = ((net.local_buttons if sender == Net.local_id() else net.last_buttons.get(sender, 0)) & InputFrame.ADS) != 0
+	dir = Spread.offset_dir(dir, Spread.cone_deg(ws.data, ads), sender, seq)
 	_trace(sender, shooter, origin, dir, t, st_time, ws)
 
 ## Clock used for the rate limiter: the shooter's own stamp mapped to host time, so network

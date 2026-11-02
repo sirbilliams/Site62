@@ -31,3 +31,15 @@ func test_rewind_clamped() -> void:
 func test_unknown_peer_falls_back_to_now() -> void:
 	var c := ClockSync.new()
 	assert_near(c.rewind_time(77, 5.0, 10.0, 0.1), 10.0, 1e-4, "no samples")
+
+func test_offset_is_stable_when_samples_worsen() -> void:
+	var c := ClockSync.new()
+	c.set_rtt(5, 0.1)
+	_feed(c)
+	var before := c.offset(5)
+	c.observe(5, 110.0, 10.0 + 0.15)           # one very late frame
+	assert_true(absf(c.offset(5) - before) < 2e-3, "no jump")
+	for i in 400:                               # long-running steady state: no step changes
+		var prev := c.offset(5)
+		c.observe(5, 110.0 + i * 0.016, 10.0 + i * 0.016 + 0.07)
+		assert_true(absf(c.offset(5) - prev) < 2e-3, "smooth step %d" % i)

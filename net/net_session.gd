@@ -86,6 +86,13 @@ func send_unreliable(node: Node, method: StringName, peer: int, args: Array) -> 
 	else:
 		_do_send(node, method, peer, args)
 
+## Reliable game message (target method must be declared @rpc reliable). LinkSim delays it but never drops it.
+func send_reliable(node: Node, method: StringName, peer: int, args: Array) -> void:
+	if link_sim.enabled():
+		link_sim.submit(_do_send.bind(node, method, peer, args), false)
+	else:
+		_do_send(node, method, peer, args)
+
 func _do_send(node: Node, method: StringName, peer: int, args: Array) -> void:
 	if not is_instance_valid(node) or not node.is_inside_tree():
 		return
