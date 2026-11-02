@@ -57,3 +57,21 @@ func resolve(key: float, hit: bool) -> void:
 
 func pending_markers() -> int:
 	return _markers.size()
+
+## Grenade blast: a translucent orange sphere of the blast radius that vanishes quickly (placeholder).
+func explosion(pos: Vector3, radius: float) -> void:
+	if not is_inside_tree():
+		return
+	var mi := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = radius * 0.3
+	sm.height = radius * 0.6
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(1, 0.5, 0.1, 0.5)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sm.material = mat
+	mi.mesh = sm
+	add_child(mi)
+	mi.global_position = pos
+	_expire(mi, 0.25)

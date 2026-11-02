@@ -8,6 +8,7 @@ var weapons: Dictionary = {}
 var enemies: Dictionary = {}
 var suds: Dictionary = {}
 var powerups: Dictionary = {}
+var throwables: Dictionary = {}
 var curve: RoundCurve
 var balance: Balance
 
@@ -18,6 +19,7 @@ func _init() -> void:
 	_load_dir("res://content/enemies", enemies)
 	_load_dir("res://content/suds", suds)
 	_load_dir("res://content/powerups", powerups)
+	_load_dir("res://content/throwables", throwables)
 
 func _load_dir(path: String, into: Dictionary) -> void:
 	var dir := DirAccess.open(path)
@@ -36,6 +38,9 @@ func _load_dir(path: String, into: Dictionary) -> void:
 func weapon(id: StringName) -> WeaponData:
 	return weapons.get(id)
 
+func throwable(id: StringName) -> ThrowableData:
+	return throwables.get(id)
+
 func validate() -> PackedStringArray:
 	var errs := PackedStringArray()
 	if curve == null:
@@ -51,6 +56,9 @@ func validate() -> PackedStringArray:
 			errs.append("suds %s: cost < 0" % s.id)
 		if not SUDS_EFFECTS.has(s.effect):
 			errs.append("suds %s: unknown effect %s" % [s.id, s.effect])
+	for t in throwables.values():
+		if t.fuse_s <= 0.0 or t.radius <= 0.0 or t.damage <= 0.0:
+			errs.append("throwable %s: fuse/radius/damage must be > 0" % t.id)
 	for p in powerups.values():
 		if not POWERUP_KINDS.has(p.kind):
 			errs.append("powerup %s: unknown kind %s" % [p.id, p.kind])

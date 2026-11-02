@@ -79,6 +79,8 @@ func on_board(by: int) -> void:
 func reset_round() -> void:
 	for w: Wallet in wallets.values():
 		w.reset_round()
+	if weapons != null:
+		weapons.on_round_start()
 
 func _hook_barricades() -> void:
 	for b in _hooked.keys():
@@ -185,19 +187,5 @@ func _rx_denied(path: String, reason: String) -> void:
 # ---------------------------------------------------------------- loadout (clients learn a bought weapon / refill)
 
 func _send_loadout(peer: int) -> void:
-	if weapons == null or peer == Net.local_id():
-		return
-	var st := weapons.state_for(peer)
-	Net.send_reliable(self, &"_rx_loadout", peer, [String(st.data.id), st.mag, st.reserve])
-
-@rpc("authority", "reliable")
-func _rx_loadout(weapon_id: String, mag: int, reserve: int) -> void:
-	if Net.is_host() or weapons == null:
-		return
-	var me := Net.local_id()
-	if weapons.state_for(me).data.id != StringName(weapon_id):
-		weapons.set_weapon(me, StringName(weapon_id))
-	var st := weapons.state_for(me)
-	st.mag = mag
-	st.reserve = reserve
-	st.reloading = false
+	if weapons != null:
+		weapons.send_kit(peer, true)

@@ -1,7 +1,7 @@
 class_name WallBuy
 extends Interactable
 ## A weapon on the wall: full price for the gun, ammo_cost for a refill when the player already holds it.
-## One weapon slot per player for now (a 2-slot inventory is a later task), so buying replaces the held gun.
+## A new gun fills an empty slot, else replaces the held one; ammo refills the slot that holds this gun.
 
 @export var weapon_id: StringName = &""
 
@@ -9,14 +9,14 @@ func _data() -> WeaponData:
 	return Content.weapon(weapon_id)
 
 func _holds(player: Player) -> bool:
-	return weapons != null and weapons.state_for(player.peer_id).data.id == weapon_id
+	return weapons != null and weapons.kit_for(player.peer_id).has_weapon(weapon_id)
 
 func reject_reason(player: Player) -> StringName:
 	var d := _data()
 	if d == null or not d.is_wall_buy:
 		return &"invalid"
 	if _holds(player):
-		var st := weapons.state_for(player.peer_id)
+		var st := weapons.kit_for(player.peer_id).state_of(weapon_id)
 		if st.mag >= d.mag and st.reserve >= d.reserve:
 			return &"ammo_full"
 	return &""
@@ -41,6 +41,6 @@ func use(player: Player) -> bool:
 	if weapons == null:
 		return false
 	if _holds(player):
-		weapons.state_for(player.peer_id).refill()
+		weapons.kit_for(player.peer_id).state_of(weapon_id).refill()
 		return true
 	return weapons.set_weapon(player.peer_id, weapon_id)

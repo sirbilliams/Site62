@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ThrowableData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://content/types/throwable_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"frag"
+display_name = "Frag"
+fuse_s = 2.5
+radius = 5.0
+damage = 300.0
+throw_speed = 14.0

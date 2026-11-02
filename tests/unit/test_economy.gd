@@ -155,3 +155,30 @@ func test_bind_wiring_with_real_signals() -> void:
 		o.free()
 	b.free(); z.free(); pn.free(); zs.free()
 	_free(e)           # frees p through the shared players dict
+
+func test_wall_buy_two_slots() -> void:
+	var e := _setup()
+	var h := WallBuy.new()
+	h.weapon_id = &"hornet"
+	var g := WallBuy.new()
+	g.weapon_id = &"garand_k"
+	var s := WallBuy.new()
+	s.weapon_id = &"sentinel_45"
+	e.wallet(1).points = 5000
+	var kit := e.weapons.kit_for(1)
+	assert_eq(e.handle_use(1, h, Vector3.ZERO), &"", "hornet into the empty slot")
+	assert_eq(kit.slots[0].data.id, &"sentinel_45", "start gun kept")
+	assert_eq(kit.slots[1].data.id, &"hornet", "slot 1")
+	assert_eq(e.handle_use(1, g, Vector3.ZERO), &"", "third gun replaces the held one")
+	assert_eq(kit.slots[1].data.id, &"garand_k", "held slot replaced")
+	assert_eq(kit.slots[0].data.id, &"sentinel_45", "other slot kept")
+	kit.slots[0].mag = 0
+	kit.slots[0].reserve = 0
+	s.weapons = e.weapons
+	assert_eq(s.cost_for(e.players[1]), Content.weapon(&"sentinel_45").ammo_cost, "ammo price for the gun in the other slot")
+	assert_eq(e.handle_use(1, s, Vector3.ZERO), &"", "ammo for the NOT held gun")
+	assert_eq(kit.slots[0].mag, kit.slots[0].data.mag, "refilled in its slot")
+	assert_eq(kit.held, 1, "held unchanged")
+	assert_eq(kit.slots[1].data.id, &"garand_k", "held gun untouched")
+	h.free(); g.free(); s.free()
+	_free(e)

@@ -31,6 +31,8 @@ func _ready() -> void:
 func bind_weapons(w: WeaponService) -> void:
 	svc = w
 	svc.hit.connect(_on_hit)
+	svc.melee_hit.connect(func(by, target, dmg): _damage(by, target, dmg, false, true))
+	svc.grenade_hit.connect(func(by, target, dmg): _damage(by, target, dmg, false, false))
 
 func live_count() -> int:
 	var n := 0
@@ -104,11 +106,14 @@ func _finish(zid: int, pos: Vector3) -> void:
 	_schedule_remove(zid)
 
 func _on_hit(shooter: int, target: int, dmg: float, head: bool) -> void:
+	_damage(shooter, target, dmg, head, false)
+
+func _damage(by: int, target: int, dmg: float, head: bool, melee: bool) -> void:
 	if not Net.is_host() or target >= 0:
 		return
 	var z: Zombie = zombies.get(Zombie.zid_of(target))
 	if z != null:
-		z.take_damage(dmg, shooter, head)
+		z.take_damage(dmg, by, head, melee)
 
 func _schedule_remove(zid: int) -> void:
 	get_tree().create_timer(REMOVE_DELAY_S).timeout.connect(_remove.bind(zid))

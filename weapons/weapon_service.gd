@@ -6,6 +6,8 @@ extends Node3D
 ## Must be a child of the same parent as PlayerNet, named "WeaponService" on every peer.
 
 signal hit(shooter: int, target: int, dmg: float, headshot: bool)
+signal melee_hit(attacker: int, target: int, dmg: float)                       # host
+signal grenade_hit(thrower: int, target: int, dmg: float)                     # host
 signal fire_rejected(shooter: int, reason: StringName)
 signal result_received(t: float, kind: int, reason: StringName, target: int, dmg: float, headshot: bool)  # client
 
@@ -20,11 +22,17 @@ const SKIN := 0.05
 const AMMO_SYNC_EVERY := 30             # physics ticks (0.5 s)
 const BASE_FOV := 75.0
 const FOV_RATE := 14.0
+const SWAP_TOL := 0.25                   # fraction of swap_s forgiven for network jitter
 
 var net: PlayerNet
 var history := HitHistory.new()
 var targets := {}                        # id -> HitTarget (host: authoritative; client: visual copies)
-var states := {}                         # peer id -> WeaponState (host: all; client: local only)
+var kits := {}                           # peer id -> Inventory (host: all; client: local only)
+var grenade_scene: PackedScene = preload("res://weapons/grenade.tscn")
+var grenades_live := {}                  # gid -> Grenade (host and client copies)
+var last_melee := {}                     # host debug: attacker -> {id, time}
+var boom_rx := 0                         # client: explode events received (tests)
+var spawn_rx := 0
 var view: WeaponView
 var dummy: TargetDummy
 var lag_comp := true                     # test hook: false = rewind to now
@@ -39,6 +47,14 @@ var _inflight := 0                       # client: shots sent whose verdict has 
 var _counters := {}                      # host: peer id -> requests received (spread seed)
 var _pings := {}                         # host: nonce -> [sent_s, {peer: true} answered]
 var _nonce := 0
+var _prev_buttons := 0
+var _swaps_sent := 0                     # client: swap requests sent
+var _swap_count := {}                    # host: peer -> swap requests received (acknowledged in every kit)
+var _melees := {}                        # host: peer -> Melee
+var _melee_next := 0.0                   # client: local swing cooldown
+var _next_throw := {}                    # host: peer -> earliest next throw (host clock)
+var _next_gid := 1
+var _recoil_id := &""
 
 func _ready() -> void:
 	name = "WeaponService"
@@ -68,19 +84,38 @@ func spawn_dummy() -> TargetDummy:
 	register_target(DUMMY_ID, dummy)
 	return dummy
 
+## A bought gun: fills an empty slot, else replaces the held one (see Inventory.give).
 func set_weapon(peer: int, weapon_id: StringName) -> bool:
 	var d := Content.weapon(weapon_id)
 	if d == null:
 		return false
-	states[peer] = WeaponState.new(d)
-	if peer == Net.local_id():
-		recoil = Recoil.new(d.recoil)
+	kit_for(peer).give(d)
+	_sync_recoil()
 	return true
 
+func kit_for(peer: int) -> Inventory:
+	if not kits.has(peer):
+		kits[peer] = Inventory.new(Content.weapon(DEFAULT_WEAPON))
+		_sync_recoil()
+	return kits[peer]
+
 func state_for(peer: int) -> WeaponState:
-	if not states.has(peer):
-		set_weapon(peer, DEFAULT_WEAPON)
-	return states[peer]
+	return kit_for(peer).held_state()
+
+## The local camera kick follows the held gun.
+func _sync_recoil() -> void:
+	if not kits.has(Net.local_id()):
+		return
+	var d := (kits[Net.local_id()] as Inventory).held_state().data
+	if d.id != _recoil_id:
+		_recoil_id = d.id
+		recoil = Recoil.new(d.recoil)
+
+## Host: +grenades at the start of a round (up to the cap).
+func on_round_start() -> void:
+	for peer in kits:
+		(kits[peer] as Inventory).refill_grenades()
+		send_kit(peer, true)
 
 # ---------------------------------------------------------------- per tick
 
@@ -112,15 +147,15 @@ func _host_tick() -> void:
 	if _tick % AMMO_SYNC_EVERY == 0:
 		for id in net.players:
 			if id != Net.local_id():
-				var ws := state_for(id)
-				Net.send_reliable(self, &"_rx_ammo", id, [ws.mag, ws.reserve])
-	for st in states.values():
-		(st as WeaponState).update(now)
+				send_kit(id, false)
+	for k: Inventory in kits.values():
+		for st in k.slots:
+			if st != null:
+				st.update(now)
 
 func _client_tick() -> void:
-	var st: WeaponState = states.get(Net.local_id())
-	if st != null:
-		st.update(now_s())
+	if kits.has(Net.local_id()):
+		state_for(Net.local_id()).update(now_s())
 	_recover_recoil()
 
 func _recover_recoil() -> void:
@@ -155,6 +190,15 @@ func _local_input() -> void:
 		return
 	var b := net.local_buttons
 	var st := state_for(Net.local_id())
+	var pressed := b & ~_prev_buttons
+	_prev_buttons = b
+	if pressed & InputFrame.NEXT_WEAPON:
+		swap_local()
+	if pressed & InputFrame.MELEE:
+		melee_local()
+	if pressed & InputFrame.GRENADE:
+		grenade_local()
+	st = state_for(Net.local_id())
 	if b & InputFrame.RELOAD:
 		reload_local()
 	if b & InputFrame.FIRE:
@@ -181,7 +225,7 @@ func fire_local(dir: Vector3) -> bool:
 		return false
 	var t := now_s()
 	var st := state_for(Net.local_id())
-	if not st.fire(t):
+	if kit_for(Net.local_id()).swap_blocked(t) or not st.fire(t):
 		return false
 	var origin := eye_of(me)
 	var seq := _peek_seq(Net.local_id()) if Net.is_host() else _shot_seq
@@ -209,6 +253,38 @@ func fire_local(dir: Vector3) -> bool:
 		_inflight += 1
 		Net.send_reliable(self, &"request_fire", 1, [Net.local_id(), origin, dir, t, seq])
 	return true
+
+## Swap to the other gun (predicted at once; the host's kit message confirms).
+func swap_local() -> bool:
+	if not kit_for(Net.local_id()).swap(now_s()):
+		return false
+	_sync_recoil()
+	if not Net.is_host():
+		_swaps_sent += 1
+		Net.send_reliable(self, &"request_swap", 1, [])
+	return true
+
+func melee_local() -> void:
+	var me := net.local_player()
+	var t := now_s()
+	if me == null or t < _melee_next:
+		return
+	_melee_next = t + balance().melee_cooldown_s
+	var dir := _look_dir(me)
+	if Net.is_host():
+		handle_melee(Net.local_id(), eye_of(me), dir, t)
+	else:
+		Net.send_reliable(self, &"request_melee", 1, [Net.local_id(), eye_of(me), dir, t])
+
+func grenade_local() -> void:
+	var me := net.local_player()
+	if me == null:
+		return
+	var dir := _look_dir(me)
+	if Net.is_host():
+		handle_grenade(Net.local_id(), eye_of(me), dir)
+	else:
+		Net.send_reliable(self, &"request_grenade", 1, [Net.local_id(), eye_of(me), dir])
 
 func reload_local() -> void:
 	var st := state_for(Net.local_id())
@@ -251,11 +327,12 @@ func _rx_pong(nonce) -> void:
 
 ## Host verdict for one of my shots. kind: MISS | HIT | REJECTED.
 @rpc("authority", "reliable")
-func _rx_result(t: float, kind: int, reason: String, mag: int, reserve: int, target: int, dmg: float, headshot: bool) -> void:
+func _rx_result(t: float, kind: int, reason: String, mag: int, reserve: int, target: int, dmg: float, headshot: bool, held: int = 0) -> void:
 	if Net.is_host():
 		return
 	_inflight = maxi(_inflight - 1, 0)
-	_apply_host_ammo(mag, reserve)
+	if held == kit_for(Net.local_id()).held:
+		_apply_host_ammo(mag, reserve)
 	view.resolve(t, kind == HIT)
 	result_received.emit(t, kind, StringName(reason), target, dmg, headshot)
 
@@ -267,11 +344,49 @@ func _apply_host_ammo(mag: int, reserve: int) -> void:
 	st.mag = maxi(mag - _inflight, 0)
 	st.reserve = reserve
 
-@rpc("authority", "reliable")
-func _rx_ammo(mag: int, reserve: int) -> void:
-	if Net.is_host() or _inflight > 0:
+## Host -> peer: the whole kit (held slot, both guns' ammo, grenades). `force` (after a buy / swap / throw)
+## applies even while shots are in flight; the periodic copy waits for their verdicts.
+func send_kit(peer: int, force := true) -> void:
+	if not Net.is_host() or peer == Net.local_id() or not kits.has(peer):
 		return
-	_apply_host_ammo(mag, reserve)
+	var k: Inventory = kits[peer]
+	var ids: Array = []
+	var mags: Array = []
+	var res: Array = []
+	for st in k.slots:
+		ids.append(String(st.data.id) if st != null else "")
+		mags.append(st.mag if st != null else 0)
+		res.append(st.reserve if st != null else 0)
+	Net.send_reliable(self, &"_rx_kit", peer, [k.held, ids, mags, res, k.grenades, _swap_count.get(peer, 0), force])
+
+@rpc("authority", "reliable")
+func _rx_kit(held: int, ids: Array, mags: Array, res: Array, grenades: int, swap_ack: int, force: bool) -> void:
+	if Net.is_host() or (_inflight > 0 and not force) or ids.size() != 2 or mags.size() != 2 or res.size() != 2:
+		return
+	var k := kit_for(Net.local_id())
+	if swap_ack == _swaps_sent and (held == 0 or held == 1) and ids[held] != "":
+		k.held = held                         # no swap of mine is still travelling: the host's choice stands
+	for i in 2:
+		if ids[i] == "":
+			k.slots[i] = null
+			continue
+		var d := Content.weapon(StringName(ids[i]))
+		if d == null:
+			continue
+		var st := k.slots[i]
+		if st == null or st.data.id != d.id:
+			st = WeaponState.new(d)
+			k.slots[i] = st
+		elif i == k.held and st.reloading:
+			continue                          # the local reload lands on the same numbers
+		st.mag = maxi(int(mags[i]) - (_inflight if i == k.held else 0), 0)
+		st.reserve = int(res[i])
+		if i != k.held:
+			st.reloading = false
+	if k.slots[k.held] == null:
+		k.held = 1 - k.held
+	k.grenades = grenades
+	_sync_recoil()
 
 # ---------------------------------------------------------------- host side
 
@@ -337,7 +452,7 @@ func _reply(peer: int, t: float, kind: int, reason: StringName, target: int, dmg
 		view.resolve(t, kind == HIT)
 		result_received.emit(t, kind, reason, target, dmg, head)
 		return
-	Net.send_reliable(self, &"_rx_result", peer, [t, kind, String(reason), st.mag, st.reserve, target, dmg, head])
+	Net.send_reliable(self, &"_rx_result", peer, [t, kind, String(reason), st.mag, st.reserve, target, dmg, head, kit_for(peer).held])
 
 ## Validate and resolve one shot. `t` is the shooter's client clock stamp (host's own clock for the host).
 func handle_fire(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float, seq: int) -> void:
@@ -358,10 +473,10 @@ func handle_fire(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: fl
 		_reject(sender, &"origin", t)
 		return
 	var now := now_s()
-	var st_time := now
-	if sender != Net.local_id():
-		st_time = clampf(net.clock.rewind_time(sender, t, now, Player.INTERP_DELAY_MS / 1000.0), now - ClockSync.MAX_REWIND, now) \
-			if lag_comp else now
+	var st_time := _rewind_time(sender, t, now)
+	if kit_for(shooter).swap_blocked(now, balance().swap_s * SWAP_TOL):
+		_reject(sender, &"swap", t)
+		return
 	var mult := 1.0 + balance().fire_rate_tolerance
 	var ws := state_for(shooter)
 	var reason := ws.block_reason(_fire_clock(sender, t, now), mult)
@@ -418,3 +533,158 @@ func _trace(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float, 
 	last_rewind = {"id": best_id, "time": st_time, "now": now_s()}
 	hit.emit(shooter, best_id, dmg, best_head)
 	_reply(sender, t, HIT, &"", best_id, dmg, best_head)
+
+# ---------------------------------------------------------------- swap / melee / grenade (host)
+
+func _rewind_time(sender: int, t: float, now: float) -> float:
+	if sender == Net.local_id() or not lag_comp:
+		return now
+	return clampf(net.clock.rewind_time(sender, t, now, Player.INTERP_DELAY_MS / 1000.0), now - ClockSync.MAX_REWIND, now)
+
+@rpc("any_peer", "reliable")
+func request_swap() -> void:
+	if not Net.is_host():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if sender == 0:
+		return
+	_swap_count[sender] = _swap_count.get(sender, 0) + 1    # counted even when refused: the client matches it
+	var p: Player = net.players.get(sender)
+	if p != null and p.state == Player.ALIVE and _take_token(sender):
+		kit_for(sender).swap(now_s(), balance().swap_s * SWAP_TOL)
+	send_kit(sender, true)
+
+## Shared checks of a melee / grenade request: finite values, sender, alive, origin near the host's eye.
+func _vet(sender: int, shooter, origin, dir) -> Player:
+	if sender == 0 or not _take_token(sender):
+		return null
+	if not (_vec(origin) and _vec(dir)) or typeof(shooter) != TYPE_INT or not Net.sender_is(shooter):
+		return null
+	return _vet_pose(sender, origin, dir)
+
+func _vet_pose(sender: int, origin: Vector3, dir: Vector3) -> Player:
+	if absf(dir.length() - 1.0) > 0.1:
+		return null
+	var p: Player = net.players.get(sender)
+	if p == null or p.state != Player.ALIVE or eye_of(p).distance_to(origin) > balance().shot_origin_tolerance:
+		return null
+	return p
+
+@rpc("any_peer", "reliable")
+func request_melee(shooter, origin, dir, t) -> void:
+	if not Net.is_host() or not _num(t):
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if _vet(sender, shooter, origin, dir) == null:
+		return
+	handle_melee(sender, origin, (dir as Vector3).normalized(), float(t))
+
+@rpc("any_peer", "reliable")
+func request_grenade(shooter, origin, dir) -> void:
+	if not Net.is_host():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if _vet(sender, shooter, origin, dir) == null:
+		return
+	handle_grenade(sender, origin, (dir as Vector3).normalized())
+
+func _blocked_by_wall(from: Vector3, to: Vector3) -> bool:
+	var q := PhysicsRayQueryParameters3D.create(from, to, 1)
+	return not get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+## Host: one knife swing. Returns the target id hit (0 = none, or refused by the cooldown / state checks).
+func handle_melee(sender: int, origin: Vector3, dir: Vector3, t: float) -> int:
+	if not Net.is_host() or _vet_pose(sender, origin, dir) == null:
+		return 0
+	var now := now_s()
+	var m: Melee = _melees.get(sender)
+	if m == null:
+		m = Melee.new()
+		_melees[sender] = m
+	var clk := _fire_clock(sender, t, now)
+	if not m.ready(clk, balance().melee_cooldown_s, balance().fire_rate_tolerance):
+		return 0
+	m.swing(clk)
+	var st_time := _rewind_time(sender, t, now)
+	var cands: Array = []
+	for id in targets:
+		var tg: HitTarget = targets[id]
+		if not tg.alive:
+			continue
+		var pose = history.pose_at(id, st_time)
+		if pose == null:
+			continue
+		var pts: Array = []
+		for b in tg.boxes:
+			pts.append((pose as Transform3D) * (b.aabb as AABB).get_center())
+		cands.append({"id": id, "points": pts})
+	var hit_id := Melee.pick(origin, dir, cands, balance().melee_range, balance().melee_cone_deg, _blocked_by_wall)
+	if hit_id != 0:
+		last_melee[sender] = {"id": hit_id, "time": st_time}
+		melee_hit.emit(sender, hit_id, balance().melee_damage)
+	return hit_id
+
+## Host: throw one grenade from the eye along `dir`. False if refused.
+func handle_grenade(sender: int, origin: Vector3, dir: Vector3) -> bool:
+	if not Net.is_host() or _vet_pose(sender, origin, dir) == null:
+		return false
+	var now := now_s()
+	var cd := balance().grenade_cooldown_s
+	if now < _next_throw.get(sender, -INF) - cd * SWAP_TOL:
+		return false
+	var kit := kit_for(sender)
+	if not kit.take_grenade():
+		return false
+	_next_throw[sender] = now + cd
+	var d := Content.throwable(&"frag")
+	var gid := _next_gid
+	_next_gid += 1
+	var at := origin + dir * 0.5
+	var vel := dir * d.throw_speed
+	var g := _make_grenade(gid, sender, d, at, vel, true)
+	g.exploded.connect(_on_boom)
+	Net.send_reliable(self, &"_rx_grenade_spawn", 0, [gid, sender, at, vel])
+	send_kit(sender, true)
+	return true
+
+func _make_grenade(gid: int, by: int, d: ThrowableData, at: Vector3, vel: Vector3, host: bool) -> Grenade:
+	var g: Grenade = grenade_scene.instantiate()
+	g.launch(gid, by, d, at, vel, host)
+	add_child(g)
+	grenades_live[gid] = g
+	return g
+
+func _on_boom(gid: int, thrower: int, pos: Vector3) -> void:
+	var g: Grenade = grenades_live.get(gid)
+	grenades_live.erase(gid)
+	var d: ThrowableData = g.data if g != null else Content.throwable(&"frag")
+	if g != null:
+		g.queue_free()
+	var center := pos + Vector3(0, 0.25, 0)
+	var cands: Array = []
+	for id in targets:
+		var tg: HitTarget = targets[id]
+		if tg.alive and not tg.boxes.is_empty():
+			cands.append({"id": id, "pos": tg.global_transform * (tg.boxes[0].aabb as AABB).get_center()})
+	for r in Grenade.blast(center, cands, d, _blocked_by_wall):
+		grenade_hit.emit(thrower, r.id, r.dmg)
+	Net.send_reliable(self, &"_rx_grenade_boom", 0, [gid, pos])
+	view.explosion(pos, d.radius)
+
+@rpc("authority", "reliable")
+func _rx_grenade_spawn(gid: int, thrower: int, at: Vector3, vel: Vector3) -> void:
+	if Net.is_host() or not _vec(at) or not _vec(vel):
+		return
+	spawn_rx += 1
+	_make_grenade(gid, thrower, Content.throwable(&"frag"), at, vel, false)
+
+@rpc("authority", "reliable")
+func _rx_grenade_boom(gid: int, pos: Vector3) -> void:
+	if Net.is_host():
+		return
+	boom_rx += 1
+	var g: Grenade = grenades_live.get(gid)
+	grenades_live.erase(gid)
+	if g != null:
+		g.queue_free()
+	view.explosion(pos, Content.throwable(&"frag").radius)
