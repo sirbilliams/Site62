@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://content/types/weapon_data.gd" id="1"]
+[ext_resource type="Resource" path="res://content/weapons/bulwark_60_refit.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"bulwark_60"
+display_name = "Bulwark-60"
+damage = 30.0
+falloff_start = 15.0
+falloff_end = 40.0
+falloff_min_mult = 0.5
+fire_rate_rpm = 600.0
+mode = 1
+mag = 60
+reserve = 240
+reload_s = 5.0
+spread_hip_deg = 5.0
+spread_ads_deg = 1.8
+recoil = PackedVector2Array(0.2, 0.8, -0.2, 0.9, 0.1, 1.0)
+ads_fov = 60.0
+cost = 1900
+ammo_cost = 950
+is_wall_buy = true
+refit = ExtResource("2")

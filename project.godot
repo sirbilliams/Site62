@@ -15,3 +15,7 @@ window/stretch/mode="canvas_items"
 [rendering]
 
 renderer/rendering_method="forward_plus"
+
+[autoload]
+
+Content="*res://content/content_db.gd"

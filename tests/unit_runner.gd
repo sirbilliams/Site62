@@ -1,6 +1,6 @@
 extends SceneTree
 
-func _init() -> void:
+func _initialize() -> void:
 	var filter := ""
 	var args := OS.get_cmdline_user_args()
 	if args.size() > 0:
@@ -16,7 +16,7 @@ func _init() -> void:
 	files.sort()
 	for f in files:
 		var script: GDScript = load("res://tests/unit/" + f)
-		if script == null:
+		if script == null or not script.can_instantiate():
 			failed += 1
 			print("UNIT FAIL %s: load error" % f)
 			continue

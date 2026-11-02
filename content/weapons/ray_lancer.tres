@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://content/types/weapon_data.gd" id="1"]
+[ext_resource type="Resource" path="res://content/weapons/ray_lancer_refit.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"ray_lancer"
+display_name = "Ray-Lancer"
+damage = 90.0
+falloff_start = 15.0
+falloff_end = 40.0
+falloff_min_mult = 0.5
+fire_rate_rpm = 200.0
+mode = 0
+mag = 12
+reserve = 60
+reload_s = 2.8
+spread_hip_deg = 2.0
+spread_ads_deg = 0.1
+recoil = PackedVector2Array(0.0, 1.5, 0.1, 1.2)
+ads_fov = 55.0
+cost = 0
+ammo_cost = 0
+is_wall_buy = false
+refit = ExtResource("2")

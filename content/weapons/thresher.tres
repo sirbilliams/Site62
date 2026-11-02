@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://content/types/weapon_data.gd" id="1"]
+[ext_resource type="Resource" path="res://content/weapons/thresher_refit.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"thresher"
+display_name = "Thresher"
+damage = 16.0
+falloff_start = 15.0
+falloff_end = 40.0
+falloff_min_mult = 0.5
+fire_rate_rpm = 75.0
+mode = 0
+mag = 6
+reserve = 54
+reload_s = 3.0
+spread_hip_deg = 6.0
+spread_ads_deg = 4.0
+recoil = PackedVector2Array(0.0, 3.0)
+ads_fov = 70.0
+cost = 1500
+ammo_cost = 750
+is_wall_buy = true
+refit = ExtResource("2")

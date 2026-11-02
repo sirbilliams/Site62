@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="SudsData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://content/types/suds_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"second_wind_root_beer"
+display_name = "Second-Wind Root Beer"
+cost = 1500
+effect = &"revive"
+value = 0.5
+color = Color(0.4, 0.22, 0.1, 1)

@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://content/types/weapon_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hornet_refit"
+display_name = "Isotope Hornet"
+damage = 36.0
+falloff_start = 15.0
+falloff_end = 40.0
+falloff_min_mult = 0.5
+fire_rate_rpm = 900.0
+mode = 1
+mag = 32
+reserve = 288
+reload_s = 2.0
+spread_hip_deg = 4.0
+spread_ads_deg = 1.2
+recoil = PackedVector2Array(0.1, 0.5, -0.1, 0.5, 0.05, 0.6)
+ads_fov = 65.0
+cost = 1000
+ammo_cost = 500
+is_wall_buy = false

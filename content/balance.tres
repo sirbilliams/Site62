@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="Balance" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://content/types/balance.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+start_points = 500
+pts_hit = 10
+pts_kill = 60
+pts_headshot_bonus = 40
+pts_melee_kill = 120
+pts_board = 10
+board_cap_per_round = 400
+player_hp = 100.0
+downed_bleedout_s = 30.0
+revive_hold_s = 4.0
+max_suds = 4
+powerup_drop_chance = 0.03
+powerup_max_per_round = 4
+powerup_duration_s = 30.0
+crate_cost = 950
+crate_moves_after_uses = 6
+refit_cost = 5000
+fire_rate_tolerance = 0.1
