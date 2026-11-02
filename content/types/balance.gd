@@ -19,3 +19,4 @@ extends Resource
 @export var crate_moves_after_uses: int = 6
 @export var refit_cost: int = 5000
 @export var fire_rate_tolerance: float = 0.10
+@export var max_alive: int = 40

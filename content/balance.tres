@@ -22,3 +22,4 @@ crate_cost = 950
 crate_moves_after_uses = 6
 refit_cost = 5000
 fire_rate_tolerance = 0.1
+max_alive = 40

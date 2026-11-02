@@ -51,10 +51,6 @@ func test_alive_cap_40() -> void:
 	curve.base_count = 5
 	curve.count_per_round = 3
 	curve.coop_count_bonus = 0.5
-	curve.base_health = 120
-	curve.health_per_round = 80
-	curve.linear_health_until = 10
-	curve.health_growth = 1.08
 	curve.spawn_base_s = 0.1
 	curve.spawn_step_s = 0.0
 	curve.spawn_min_s = 0.0
@@ -67,17 +63,55 @@ func test_alive_cap_40() -> void:
 	director.set_curve(curve)
 	director.set_zones(zones)
 	director._player_count = 1
+	director._max_alive = 40
 	director._start_round(30)
 	
-	director._zombies_remaining = 60
+	director._zombies_remaining = 60  # 60 zombies to spawn
 	director.remaining = 60
 	
-	for i in 60:
-		if director._zombies_remaining > 0:
-			director._spawn_zombie()
+	var spawner := FakeSpawner.new()
+	director.connect("spawn_requested", Callable(spawner, "_on_spawn_requested"))
 	
-	assert_eq(director.alive, 40, "Alive should be capped at 40")
-	assert_true(director.alive <= 40, "Alive never exceeds 40")
+	# Tick quickly to spawn as many as possible within 5 seconds
+	# Spawn interval is 0.1s, so we can spawn many zombies
+	for i in 500:
+		director.tick(0.1)
+		if director._zombies_remaining == 0 or director.alive >= 40:
+			break
+	
+	assert_eq(spawner.spawn_count, 40, "Spawns should stop at 40 due to alive cap")
+	assert_eq(director.alive, 40, "Alive should be exactly 40")
+	assert_eq(director._zombies_remaining, 20, "20 zombies should remain queued")
+
+func test_spawn_interval_respected() -> void:
+	var curve := RoundCurve.new()
+	curve.base_count = 5
+	curve.count_per_round = 3
+	curve.coop_count_bonus = 0.5
+	curve.spawn_base_s = 2.0
+	curve.spawn_step_s = 0.0
+	curve.spawn_min_s = 0.4
+	curve.break_s = 10.0
+	
+	var zone_a := _create_spawn_zone(&"zone_a", true)
+	var zones: Array[SpawnZone] = [zone_a]
+	
+	var spawner := FakeSpawner.new()
+	
+	var director := RoundDirector.new()
+	director.set_curve(curve)
+	director.set_zones(zones)
+	director._player_count = 1
+	director._max_alive = 100
+	director.connect("spawn_requested", Callable(spawner, "_on_spawn_requested"))
+	director._start_round(1)
+	
+	# With spawn_interval 2.0s, ticking 0.1s for 5s gives exactly 3 spawns
+	# Spawns occur at t=0 (immediate at round start), t=2.0, and t=4.0
+	for i in 50:
+		director.tick(0.1)
+	
+	assert_eq(spawner.spawn_count, 3, "Should have exactly 3 spawns in 5s with 2s interval (at t=0, t=2, t=4)")
 
 func test_spawns_only_open_zones() -> void:
 	var curve := RoundCurve.new()
@@ -169,3 +203,33 @@ func test_health_per_round() -> void:
 	director._spawn_zombie()
 	
 	assert_eq(spawner.last_health, 120, "Health should equal curve.health(r) for round 1")
+
+func test_player_count_per_round() -> void:
+	var curve := RoundCurve.new()
+	curve.base_count = 5
+	curve.count_per_round = 3
+	curve.coop_count_bonus = 0.5
+	curve.break_s = 5.0
+	
+	var zone_a := _create_spawn_zone(&"zone_a", true)
+	var zones: Array[SpawnZone] = [zone_a]
+	
+	var director := RoundDirector.new()
+	director.set_curve(curve)
+	director.set_zones(zones)
+	
+	# Test: player counts differ between rounds
+	var count1_provider := Callable(self, "_return_count").bind(1)
+	director._player_count_provider = count1_provider
+	director._start_round(1)
+	var count1 := director.remaining
+	
+	var count2_provider := Callable(self, "_return_count").bind(3)
+	director._player_count_provider = count2_provider
+	director._start_round(2)
+	var count2 := director.remaining
+	
+	assert_ne(count1, count2, "Player count should affect zombie count per round")
+
+func _return_count(n: int) -> int:
+	return n

@@ -10,11 +10,14 @@ var remaining: int = 0
 var alive: int = 0
 
 var _curve: RoundCurve
+var _player_count_provider: Callable = Callable(Net.players.ids(), "size")
 var _player_count: int = 0
 var _zones: Array[SpawnZone] = []
 var _zombies_remaining: int = 0
 var _time: float = 0.0
+var _last_spawn_time: float = 0.0
 var _break_deadline: float = -1.0
+var _max_alive: int = 40
 
 func set_curve(curve: RoundCurve) -> void:
 	_curve = curve
@@ -23,7 +26,7 @@ func set_zones(zones: Array[SpawnZone]) -> void:
 	_zones = zones
 
 func start_match() -> void:
-	_player_count = Net.players.ids().size()
+	_player_count = _player_count_provider.call()
 	_start_round(1)
 
 func _start_round(r: int) -> void:
@@ -32,6 +35,7 @@ func _start_round(r: int) -> void:
 	alive = 0
 	_zombies_remaining = remaining
 	_time = 0.0
+	_last_spawn_time = -_curve.spawn_interval(round)  # Allow immediate spawn at round start
 	_break_deadline = -1.0
 	emit_signal("round_started", r)
 
@@ -46,14 +50,11 @@ func tick(dt: float) -> void:
 			_start_round(round + 1)
 		return
 	
-	if _zombies_remaining > 0:
+	if _zombies_remaining > 0 and alive < _max_alive:
 		var interval := _curve.spawn_interval(round)
-		var time_since_spawn := _get_time_since_last_spawn()
+		var time_since_spawn := _time - _last_spawn_time
 		if time_since_spawn >= interval:
 			_spawn_zombie()
-
-func _get_time_since_last_spawn() -> float:
-	return _time
 
 func _spawn_zombie() -> void:
 	var open_zones := _get_open_zones()
@@ -62,7 +63,8 @@ func _spawn_zombie() -> void:
 	var zone := open_zones[randi() % open_zones.size()]
 	var health := _curve.health(round)
 	var band := _curve.speed_band(round)
-	alive = min(alive + 1, 40)
+	alive += 1
+	_last_spawn_time = _time
 	_zombies_remaining -= 1
 	remaining = max(0, _zombies_remaining)
 	emit_signal("spawn_requested", zone, health, band)
