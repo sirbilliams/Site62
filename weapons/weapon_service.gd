@@ -389,7 +389,8 @@ func _wall_dist(origin: Vector3, dir: Vector3) -> float:
 func _trace(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float, st_time: float, ws: WeaponState) -> void:
 	var max_d := balance().max_shot_range
 	var best_t := INF
-	var best_id := -1
+	var best_id := 0                 # 0 is never an id (peers > 0, zombies < 0, dummy 1000)
+	var found := false
 	var best_head := false
 	for id in targets:
 		var pose = history.pose_at(id, st_time)
@@ -399,8 +400,9 @@ func _trace(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float, 
 		if not h.is_empty() and h.t < best_t and h.t <= max_d:
 			best_t = h.t
 			best_id = id
+			found = true
 			best_head = h.head
-	if best_id < 0:
+	if not found:
 		_reply(sender, t, MISS, &"", 0, 0.0, false)
 		return
 	if _wall_dist(origin, dir) < best_t - SKIN:

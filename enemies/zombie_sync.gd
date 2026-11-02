@@ -21,6 +21,7 @@ var spawn_rx := 0                 # client counters (tests)
 var die_rx := 0
 var _next_zid := 1
 var _tick := 0
+var _hooked := {}                 # host: Barricade -> true once its boards_changed is forwarded
 var _bufs := {}                   # client: zid -> Array of [recv_msec, pos, yaw, anim]
 
 func _ready() -> void:
@@ -84,11 +85,22 @@ func _spawn_now(pos: Vector3, enemy_id: StringName, hp: float, band: int) -> voi
 	zombie_spawned.emit(zid)
 
 func _on_died(zid: int, killer: int, headshot: bool, melee: bool, pos: Vector3) -> void:
+	_finish(zid, pos)
+	zombie_died.emit(zid, killer, headshot, melee, pos)
+
+## Host: remove a zombie without a kill (round end, cleanup). Same cleanup as a death, no `zombie_died`.
+func despawn(zid: int) -> void:
+	var z: Zombie = zombies.get(zid)
+	if not Net.is_host() or z == null or not z.alive:
+		return
+	z.alive = false
+	_finish(zid, z.position)
+
+func _finish(zid: int, pos: Vector3) -> void:
 	var z: Zombie = zombies.get(zid)
 	if z != null and z.brain != null:
-		z.brain.release_all()
+		z.brain.release_all()     # drops any barricade tear claim
 	Net.send_reliable(self, &"_rx_die", 0, [zid, pos])
-	zombie_died.emit(zid, killer, headshot, melee, pos)
 	_schedule_remove(zid)
 
 func _on_hit(shooter: int, target: int, dmg: float, head: bool) -> void:
@@ -99,28 +111,51 @@ func _on_hit(shooter: int, target: int, dmg: float, head: bool) -> void:
 		z.take_damage(dmg, shooter, head)
 
 func _schedule_remove(zid: int) -> void:
-	get_tree().create_timer(REMOVE_DELAY_S).timeout.connect(func():
-		var z: Zombie = zombies.get(zid)
-		if z == null:
-			return
-		if svc != null:
-			svc.unregister_target(Zombie.hit_id(zid))
-		zombies.erase(zid)
-		_bufs.erase(zid)
-		z.queue_free())
+	get_tree().create_timer(REMOVE_DELAY_S).timeout.connect(_remove.bind(zid))
+
+func _remove(zid: int) -> void:
+	var z: Zombie = zombies.get(zid)
+	if z == null:
+		return
+	if svc != null:
+		svc.unregister_target(Zombie.hit_id(zid))     # also HitHistory.forget
+	zombies.erase(zid)
+	_bufs.erase(zid)
+	z.queue_free()
 
 func _on_player_joined(id: int) -> void:
 	if not Net.is_host():
 		return
+	_hook_barricades()
+	Net.send_reliable(self, &"_rx_boards_all", id, [_boards_list()])
 	for z: Zombie in zombies.values():
 		if z.alive:
 			Net.send_reliable(self, &"_rx_spawn", id, [z.zid, z.position, String(z.data.id), z.band])
+
+func _on_boards_changed(n: int, b: Barricade) -> void:
+	Net.send_reliable(self, &"_rx_boards", 0, [_barricades().find(b), n])
+
+func _boards_list() -> Array:
+	var out: Array = []
+	for b: Barricade in _barricades():
+		out.append(b.boards)
+	return out
+
+## Host: forward every barricade's board count to clients (index = tree order of the "barricades" group).
+func _hook_barricades() -> void:
+	var bars := _barricades()
+	for i in bars.size():
+		var b: Barricade = bars[i]
+		if not _hooked.has(b):
+			_hooked[b] = true
+			b.boards_changed.connect(_on_boards_changed.bind(b))
 
 func _physics_process(dt: float) -> void:
 	if multiplayer.multiplayer_peer == null or multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
 		return
 	if not Net.is_host():
 		return
+	_hook_barricades()
 	while not queue.is_empty() and live_count() < Content.balance.max_alive:
 		var q: Array = queue.pop_front()
 		_spawn_now(q[0], q[1], q[2], q[3])
@@ -153,6 +188,23 @@ func _rx_spawn(zid, pos, enemy_id, band) -> void:
 	_bufs[zid] = [[Time.get_ticks_msec(), pos, 0.0, 0]]
 	spawn_rx += 1
 	zombie_spawned.emit(zid)
+
+@rpc("authority", "reliable")
+func _rx_boards(index, n) -> void:
+	if Net.is_host() or not (index is int and n is int):
+		return
+	var bars := _barricades()
+	if index >= 0 and index < bars.size():
+		(bars[index] as Barricade).set_boards(n)
+
+@rpc("authority", "reliable")
+func _rx_boards_all(list) -> void:
+	if Net.is_host() or not list is Array:
+		return
+	var bars := _barricades()
+	for i in mini(list.size(), bars.size()):
+		if list[i] is int:
+			(bars[i] as Barricade).set_boards(list[i])
 
 @rpc("authority", "reliable")
 func _rx_die(zid, pos) -> void:

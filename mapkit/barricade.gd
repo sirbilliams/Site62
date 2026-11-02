@@ -6,17 +6,16 @@ extends Node3D
 signal board_repaired(by: int)
 signal boards_changed(boards: int)
 
-const LINK_REACH := 1.5          # link endpoints sit this far in front of / behind the window
+const LINK_REACH := 1.0          # link endpoints sit this far in front of / behind the window (on the nav mesh edges)
 const TEAR_REACH := 2.2          # a zombie this close (outside) may tear boards
 
-var boards := 6
-var max_boards := 6
+var boards := 0
+var max_boards := 0
 var link: NavigationLink3D
 var _claim := 0
 
 func _init() -> void:
-	if true:
-		max_boards = Content.balance.barricade_boards
+	max_boards = Content.balance.barricade_boards
 	boards = max_boards
 	add_to_group(&"barricades")
 	link = NavigationLink3D.new()
@@ -37,7 +36,8 @@ func distance_to(p: Vector3) -> float:
 	var origin := global_position if is_inside_tree() else position
 	return origin.distance_to(p)
 
-func _set_boards(n: int) -> void:
+## Client mirror / host internal: set the board count (and the link) directly.
+func set_boards(n: int) -> void:
 	boards = clampi(n, 0, max_boards)
 	link.enabled = boards == 0
 	boards_changed.emit(boards)
@@ -46,14 +46,14 @@ func _set_boards(n: int) -> void:
 func tear_one() -> bool:
 	if boards <= 0:
 		return false
-	_set_boards(boards - 1)
+	set_boards(boards - 1)
 	return true
 
 ## Host: player `by` nails a board back. False when already full.
 func repair_one(by: int) -> bool:
 	if boards >= max_boards:
 		return false
-	_set_boards(boards + 1)
+	set_boards(boards + 1)
 	board_repaired.emit(by)
 	return true
 

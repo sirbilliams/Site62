@@ -1,8 +1,9 @@
 class_name ZombieBrain
 extends RefCounted
 ## Host-side zombie AI: nearest living player -> NavigationAgent3D path (re-pathed at most every
-## Balance.repath_s) -> tears a closed barricade in front of it (one board per board_tear_s) -> climbs
-## through the open window -> melee for attack_damage every attack_interval_s.
+## Balance.repath_s) -> tears a closed barricade between it and the target (one board per board_tear_s) ->
+## follows the agent path through the barricade's NavigationLink3D once it is open (slower there, CLIMB anim)
+## -> melee for attack_damage every attack_interval_s.
 
 const MELEE_RANGE := 1.5
 const WINDUP_S := 0.4
@@ -10,15 +11,21 @@ const CLIMB_SPEED_MULT := 0.5
 
 var z: Zombie
 var repaths := 0
-var _repath_in := -1.0
+var min_repath_gap := INF          # smallest spacing between two path requests (tests)
+var _clock := 0.0
+var _last_repath := -INF
+var _repath_in := 0.0
 var _attack_cd := WINDUP_S
 var _tear_cd := 0.0
 var _tearing: Barricade
-var _force_repath := false
-var _climb: Array = []             # waypoints through an open window; the nav mesh has a gap there, so no re-pathing
+
+## True when `b` stands between a zombie at `zpos` and its target at `tpos` and the zombie is in tearing reach.
+static func wants_tear(b: Barricade, zpos: Vector3, tpos: Vector3) -> bool:
+	return b.boards > 0 and b.is_outside(zpos) and not b.is_outside(tpos) and b.distance_to(zpos) <= Barricade.TEAR_REACH
 
 ## players: peer id -> Player. barricades: Array[Barricade].
 func tick(dt: float, players: Dictionary, barricades: Array) -> void:
+	_clock += dt
 	var target := _nearest(players)
 	if target == null:
 		z.anim = Zombie.Anim.IDLE
@@ -28,30 +35,36 @@ func tick(dt: float, players: Dictionary, barricades: Array) -> void:
 	to.y = 0.0
 	if to.length() <= MELEE_RANGE:
 		_stop_tearing()
-		_climb.clear()
 		_melee(dt, target, to)
 		return
 	_attack_cd = WINDUP_S
-	if not _climb.is_empty():
-		_climb_step(dt)
-		return
-	_repath_in -= dt
-	if _repath_in <= 0.0 or _force_repath:
-		_repath_in = Content.balance.repath_s
-		_force_repath = false
-		z.agent.target_position = tp
-		repaths += 1
-	var b := _blocking_barricade(barricades)
-	if b != null:
-		_tear(dt, b)
-		return
-	_stop_tearing()
-	for ob: Barricade in barricades:
-		if ob.boards == 0 and ob.is_outside(z.position) and ob.distance_to(z.position) <= Barricade.TEAR_REACH:
-			_climb = [ob.to_global(ob.link.start_position), ob.to_global(ob.link.end_position)]
-			_climb_step(dt)
+	var link_b := _link_zone(barricades)
+	if link_b == null:                  # between the link ends the zombie is off the nav mesh: keep the path
+		_repath_in -= dt
+		if _repath_in <= 0.0:
+			_repath(tp)
+	for b: Barricade in barricades:
+		if wants_tear(b, z.position, tp):
+			_tear(dt, b)
 			return
-	_walk(dt)
+	_stop_tearing()
+	_walk(dt, link_b != null)
+
+func _repath(tp: Vector3) -> void:
+	_repath_in = Content.balance.repath_s
+	z.agent.target_position = tp
+	repaths += 1
+	min_repath_gap = minf(min_repath_gap, _clock - _last_repath)
+	_last_repath = _clock
+
+## The open barricade whose window the zombie is crossing (inside the link ends, near its axis), or null.
+func _link_zone(barricades: Array) -> Barricade:
+	for b: Barricade in barricades:
+		if b.boards == 0:
+			var d := z.position - b.global_position
+			if absf(d.dot(b.outside_dir())) <= Barricade.LINK_REACH + 0.3 and absf(d.dot(b.global_transform.basis.x)) <= 1.5:
+				return b
+	return null
 
 func _nearest(players: Dictionary) -> Player:
 	var best: Player = null
@@ -64,12 +77,6 @@ func _nearest(players: Dictionary) -> Player:
 			bd = d
 			best = p
 	return best
-
-func _blocking_barricade(barricades: Array) -> Barricade:
-	for b: Barricade in barricades:
-		if b.boards > 0 and b.is_outside(z.position) and b.distance_to(z.position) <= Barricade.TEAR_REACH:
-			return b
-	return null
 
 func _tear(dt: float, b: Barricade) -> void:
 	if _tearing != b:
@@ -87,7 +94,6 @@ func _tear(dt: float, b: Barricade) -> void:
 		b.tear_one()
 		if b.boards == 0:
 			b.release(z.zid)
-			_force_repath = true         # the link just opened
 
 func _stop_tearing() -> void:
 	if _tearing != null:
@@ -105,27 +111,15 @@ func _melee(dt: float, target: Player, to: Vector3) -> void:
 		_attack_cd = z.data.attack_interval_s
 		target.hp = maxf(0.0, target.hp - z.data.attack_damage)   # down/revive: Task 11
 
-func _walk(dt: float) -> void:
+func _walk(dt: float, crossing: bool) -> void:
 	var next := z.agent.get_next_path_position()
 	var d := next - z.position
-	z.anim = Zombie.Anim.WALK
+	z.anim = Zombie.Anim.CLIMB if crossing else Zombie.Anim.WALK
 	if Vector2(d.x, d.z).length() < 0.02:
 		return
-	z.position += d.normalized() * minf(z.speed() * dt, d.length())
+	var spd := z.speed() * (CLIMB_SPEED_MULT if crossing else 1.0)
+	z.position += d.normalized() * minf(spd * dt, d.length())
 	_face(d)
-
-func _climb_step(dt: float) -> void:
-	z.anim = Zombie.Anim.CLIMB
-	var d: Vector3 = _climb[0] - z.position
-	_face(d)
-	var step := z.speed() * dt * CLIMB_SPEED_MULT
-	if d.length() <= step:
-		z.position = _climb[0]
-		_climb.pop_front()
-		if _climb.is_empty():
-			_force_repath = true
-	else:
-		z.position += d.normalized() * step
 
 func _face(dir: Vector3) -> void:
 	if Vector2(dir.x, dir.z).length() > 0.01:

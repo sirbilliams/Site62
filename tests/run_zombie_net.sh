@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host + zombieer A with simulated 120 ms RTT on every process. PORT env, default 26100.
+# Host + client A: 40 zombies, a barricade, real shots, 150 ms RTT on every process. PORT, RTT, LOSS env.
 cd "$(dirname "$0")/.." || exit 1
 PORT=${PORT:-26100}; RTT=${RTT:-150}; LOSS=${LOSS:-0}
 OUT=$(mktemp -d)
@@ -25,7 +25,7 @@ run a a
 wait $HP; HS=$?
 sleep 4
 [ $HS = 0 ] || fail "host exit $HS"
-for t in "$OUT/host.log:ZOMBIE NET PASS" "$OUT/a.log:ZOMBIE NET CLIENT OK (a)"; do
+for t in "$OUT/host.log:ZOMBIE NET PATH OK" "$OUT/host.log:ZOMBIE NET SHOT KILLS OK" "$OUT/host.log:ZOMBIE NET MOVING SYNC OK" "$OUT/host.log:ZOMBIE NET PASS" "$OUT/a.log:ZOMBIE NET CLIENT OK (a)"; do
   grep -q "${t#*:}" "${t%%:*}" || fail "missing '${t#*:}' in $(basename "${t%%:*}")"
 done
 grep -h "ZOMBIE" "$OUT"/*.log

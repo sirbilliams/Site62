@@ -41,3 +41,15 @@ func test_outside_side() -> void:
 	assert_true(b.is_outside(Vector3(0, 0, 3)), "+z is outside")
 	assert_true(not b.is_outside(Vector3(0, 0, -3)), "-z is inside")
 	b.free()
+
+func test_zombie_chasing_outside_player_never_tears() -> void:
+	var b := Barricade.new()
+	var z := Vector3(0.5, 0, 1.5)          # outside, within tearing reach
+	assert_true(ZombieBrain.wants_tear(b, z, Vector3(0, 0, -10)), "target behind the wall: tear")
+	assert_true(not ZombieBrain.wants_tear(b, z, Vector3(8, 0, 6)), "target outside: walk past")
+	assert_true(not ZombieBrain.wants_tear(b, Vector3(0, 0, -3), Vector3(0, 0, -10)), "already inside")
+	assert_true(not ZombieBrain.wants_tear(b, Vector3(0, 0, 9), Vector3(0, 0, -10)), "out of reach")
+	for i in 6:
+		b.tear_one()
+	assert_true(not ZombieBrain.wants_tear(b, z, Vector3(0, 0, -10)), "open: nothing to tear")
+	b.free()
