@@ -19,3 +19,4 @@ renderer/rendering_method="forward_plus"
 [autoload]
 
 Content="*res://content/content_db.gd"
+Net="*res://net/net_session.gd"
