@@ -85,6 +85,25 @@ func clear_suds(peer: int, p: Player = null) -> void:
 		p.hp = minf(p.hp, p.max_health())
 	Net.send_reliable(self, &"_rx_clear_suds", 0, [peer])
 
+## Host: a Suds effect is used up (the solo self revive) and everyone mirrors it.
+func consume_effect(peer: int, effect: StringName, p: Player = null) -> void:
+	if not Net.is_host():
+		return
+	_apply_consume(peer, effect)
+	if p != null:
+		p.hp = minf(p.hp, p.max_health())
+	Net.send_reliable(self, &"_rx_consume_suds", 0, [peer, String(effect)])
+
+func _apply_consume(peer: int, effect: StringName) -> void:
+	if _suds.has(peer) and not suds_of(peer).remove_effect(effect).is_empty():
+		suds_changed.emit(peer)
+
+@rpc("authority", "reliable")
+func _rx_consume_suds(peer, effect) -> void:
+	if Net.is_host() or typeof(peer) != TYPE_INT or typeof(effect) != TYPE_STRING:
+		return
+	_apply_consume(peer, StringName(effect))
+
 func _apply_clear(peer: int) -> void:
 	if _suds.has(peer) and suds_of(peer).count() > 0:
 		_suds[peer] = SudsEffects.new()

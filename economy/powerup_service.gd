@@ -44,6 +44,14 @@ func bind(pn: PlayerNet, zs: ZombieSync, eco: EconomyService, svc: WeaponService
 	if round_source != null:
 		round_source.round_started.connect(func(_r): new_round())
 
+## Host: every timed effect ends now (game over), on all peers.
+func end_all() -> void:
+	if not Net.is_host():
+		return
+	for kind in active.keys():
+		active.erase(kind)
+		Net.send_reliable(self, &"_rx_active", 0, [String(kind), 0.0])
+
 func new_round() -> void:
 	drops_this_round = 0
 
@@ -128,6 +136,8 @@ func _taker(pos: Vector3) -> int:
 		return 0
 	for id in net.players:
 		var pl: Player = net.players[id]
+		if pl.state != Player.ALIVE:
+			continue                 # downed / dead players cannot pick anything up
 		if absf(pl.position.y - pos.y) < 3.0 and Vector2(pl.position.x - pos.x, pl.position.z - pos.z).length() <= PICKUP_RANGE:
 			return id
 	return 0

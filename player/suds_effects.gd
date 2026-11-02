@@ -1,7 +1,7 @@
 class_name SudsEffects
 extends RefCounted
 ## The Ethereal-Suds one player holds. Pure data: stacks the four effects (max_hp, reload_mult, revive, fire_rate_mult).
-## `revive` is only stored/queried here; the down/revive flow itself belongs to Task 11.
+## `revive` is only stored/queried here; the down/revive flow lives in MatchState / LifeRules.
 
 var _owned := {}            # suds id -> {effect, value}
 
@@ -14,6 +14,15 @@ func add_raw(id: StringName, effect: StringName, value: float) -> bool:
 		return false
 	_owned[id] = {"effect": effect, "value": value}
 	return true
+
+## Drop every Suds that gives `effect` (a consumed self-revive). Returns the ids removed.
+func remove_effect(effect: StringName) -> Array:
+	var gone: Array = []
+	for k in _owned.keys():
+		if _owned[k].effect == effect:
+			gone.append(k)
+			_owned.erase(k)
+	return gone
 
 func has(id: StringName) -> bool:
 	return _owned.has(id)

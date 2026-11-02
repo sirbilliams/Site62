@@ -109,7 +109,7 @@ func _melee(dt: float, target: Player, to: Vector3) -> void:
 	_attack_cd -= dt
 	if _attack_cd <= 0.0:
 		_attack_cd = z.data.attack_interval_s
-		target.hp = maxf(0.0, target.hp - z.data.attack_damage)   # down/revive: Task 11
+		target.hp = maxf(0.0, target.hp - z.data.attack_damage)   # MatchState.tick() sees hp 0 and downs the player
 
 func _walk(dt: float, crossing: bool) -> void:
 	var next := z.agent.get_next_path_position()

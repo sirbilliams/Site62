@@ -101,6 +101,26 @@ func set_weapon(peer: int, weapon_id: StringName) -> bool:
 	return true
 
 ## Isotope Refit for the held gun of `peer`.
+## Host: a downed player keeps only the sidearm (slot 0) in hand.
+func force_sidearm(peer: int) -> void:
+	var k := kit_for(peer)
+	if k.held != 0:
+		k.slots[k.held].reloading = false
+		k.held = 0
+	k.swap_until = -INF
+	_sync_recoil()
+	send_kit(peer, true)
+
+## Host: a respawned player starts again with the sidearm only (full ammo, starting grenades).
+func reset_kit(peer: int) -> void:
+	kits[peer] = Inventory.new(Content.weapon(DEFAULT_WEAPON))
+	_sync_recoil()
+	send_kit(peer, true)
+
+## Firing needs ALIVE, or DOWN with the sidearm in hand (slot 0).
+func _may_fire(p: Player) -> bool:
+	return p.state == Player.ALIVE or (p.state == Player.DOWN and kit_for(p.peer_id).held == 0)
+
 func refit_held(peer: int) -> bool:
 	if not kit_for(peer).refit_held():
 		return false
@@ -207,17 +227,20 @@ func _process(dt: float) -> void:
 ## FIRE / RELOAD buttons of the local frame drive fire_local / reload_local.
 func _local_input() -> void:
 	var me := net.local_player() if net != null else null
-	if me == null or me.state != Player.ALIVE:
+	if me == null or me.state == Player.DEAD or (me.state == Player.DOWN and kit_for(Net.local_id()).held != 0):
 		return
+	var downed := me.state == Player.DOWN       # downed: sidearm fire / reload only
 	var b := net.local_buttons
 	var st := state_for(Net.local_id())
 	var pressed := b & ~_prev_buttons
 	_prev_buttons = b
-	if pressed & InputFrame.NEXT_WEAPON:
+	if downed:
+		pass
+	elif pressed & InputFrame.NEXT_WEAPON:
 		swap_local()
-	if pressed & InputFrame.MELEE:
+	if not downed and pressed & InputFrame.MELEE:
 		melee_local()
-	if pressed & InputFrame.GRENADE:
+	if not downed and pressed & InputFrame.GRENADE:
 		grenade_local()
 	st = state_for(Net.local_id())
 	if b & InputFrame.RELOAD:
@@ -499,7 +522,7 @@ func handle_fire(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: fl
 		return
 	dir = dir.normalized()
 	var p: Player = net.players.get(shooter)
-	if p == null or p.state != Player.ALIVE:
+	if p == null or not _may_fire(p):
 		_reject(sender, &"state", t)
 		return
 	if eye_of(p).distance_to(origin) > balance().shot_origin_tolerance:

@@ -158,6 +158,8 @@ func handle_use(peer: int, it: Interactable, pos: Vector3) -> StringName:
 	var p: Player = players.get(peer)
 	if p == null:
 		return &"player"
+	if p.state != Player.ALIVE:
+		return &"down"
 	var at := it.global_position if it.is_inside_tree() else it.position
 	var d := Vector2(at.x - pos.x, at.z - pos.z).length()
 	if not pos.is_finite() or d > Content.balance.use_range or absf(at.y - pos.y) > 3.0:

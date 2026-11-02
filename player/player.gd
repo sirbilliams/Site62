@@ -55,7 +55,7 @@ func setup(id: int, bal: Balance, local: bool) -> void:
 
 ## Run one input frame through the motor. Local prediction also queues it for replay.
 func simulate(f: InputFrame, space: PhysicsDirectSpaceState3D, dt: float, predicted: bool) -> void:
-	motor_state = Motor.step(motor_state, f, dt, space, balance)
+	motor_state = Motor.step(motor_state, _motor_frame(f), dt, space, balance)
 	yaw = f.look_yaw
 	pitch = f.look_pitch
 	if predicted:
@@ -63,6 +63,24 @@ func simulate(f: InputFrame, space: PhysicsDirectSpaceState3D, dt: float, predic
 		if pending.size() > MAX_PENDING:
 			pending.pop_front()
 	_show(motor_state.pos)
+
+## What the motor sees: DOWN crawls (Balance.downed_move_mult, no jump / sprint), DEAD does not move.
+func _motor_frame(f: InputFrame) -> InputFrame:
+	if state == ALIVE:
+		return f
+	var g := InputFrame.new()
+	g.seq = f.seq
+	g.t = f.t
+	g.look_yaw = f.look_yaw
+	g.look_pitch = f.look_pitch
+	g.move = Vector2.ZERO if state == DEAD else f.move * balance.downed_move_mult
+	return g
+
+## Host: put the avatar at `pos` right now (respawn).
+func teleport(pos: Vector3) -> void:
+	motor_state = Motor.initial_state(pos)
+	_offset = Vector3.ZERO
+	_show(pos)
 
 func _show(p: Vector3) -> void:
 	position = p + _offset
@@ -87,7 +105,7 @@ func apply_snapshot(s: Dictionary, space: PhysicsDirectSpaceState3D = null, dt :
 		while not pending.is_empty() and pending[0].seq <= ack:
 			pending.pop_front()
 		for f in pending:                # replay unacknowledged inputs
-			motor_state = Motor.step(motor_state, f, dt, space, balance)
+			motor_state = Motor.step(motor_state, _motor_frame(f), dt, space, balance)
 		var jump: float = before.distance_to(motor_state.pos)
 		max_correction = maxf(max_correction, jump)
 		# blend the visual toward the corrected position; motor_state itself snaps
