@@ -44,6 +44,7 @@ var _semi_held := false
 var recoil: Recoil                       # local player's camera kick
 var _shot_seq := 0                       # client: shots sent (host counts the same requests itself)
 var _inflight := 0                       # client: shots sent whose verdict has not arrived
+var _inflight_slots: Array = []          # client: the slot each of those shots was fired from, in order
 var _counters := {}                      # host: peer id -> requests received (spread seed)
 var _pings := {}                         # host: nonce -> [sent_s, {peer: true} answered]
 var _nonce := 0
@@ -60,6 +61,11 @@ func _ready() -> void:
 	name = "WeaponService"
 	view = WeaponView.new()
 	add_child(view)
+	Net.player_left.connect(_forget_peer)
+
+func _forget_peer(id: int) -> void:
+	for d in [_melees, _next_throw, _swap_count, kits, _bucket, _counters]:
+		d.erase(id)
 
 static func now_s() -> float:
 	return Time.get_ticks_msec() / 1000.0
@@ -89,7 +95,8 @@ func set_weapon(peer: int, weapon_id: StringName) -> bool:
 	var d := Content.weapon(weapon_id)
 	if d == null:
 		return false
-	kit_for(peer).give(d)
+	if kit_for(peer).give(d) < 0:
+		return false
 	_sync_recoil()
 	return true
 
@@ -251,6 +258,7 @@ func fire_local(dir: Vector3) -> bool:
 	else:
 		_shot_seq += 1
 		_inflight += 1
+		_inflight_slots.append(kit_for(Net.local_id()).held)
 		Net.send_reliable(self, &"request_fire", 1, [Net.local_id(), origin, dir, t, seq])
 	return true
 
@@ -331,17 +339,19 @@ func _rx_result(t: float, kind: int, reason: String, mag: int, reserve: int, tar
 	if Net.is_host():
 		return
 	_inflight = maxi(_inflight - 1, 0)
-	if held == kit_for(Net.local_id()).held:
-		_apply_host_ammo(mag, reserve)
+	if not _inflight_slots.is_empty():
+		_inflight_slots.pop_front()
+	if held == 0 or held == 1:
+		_apply_host_ammo(held, mag, reserve)
 	view.resolve(t, kind == HIT)
 	result_received.emit(t, kind, StringName(reason), target, dmg, headshot)
 
 ## The host is authoritative for ammo; shots still in flight are subtracted so the display never flickers.
-func _apply_host_ammo(mag: int, reserve: int) -> void:
-	var st := state_for(Net.local_id())
-	if st.reloading:
+func _apply_host_ammo(slot: int, mag: int, reserve: int) -> void:
+	var st := kit_for(Net.local_id()).slots[slot]
+	if st == null or st.reloading:
 		return                               # the local reload will land on the same numbers
-	st.mag = maxi(mag - _inflight, 0)
+	st.mag = maxi(mag - _inflight_slots.count(slot), 0)
 	st.reserve = reserve
 
 ## Host -> peer: the whole kit (held slot, both guns' ammo, grenades). `force` (after a buy / swap / throw)
@@ -379,7 +389,7 @@ func _rx_kit(held: int, ids: Array, mags: Array, res: Array, grenades: int, swap
 			k.slots[i] = st
 		elif i == k.held and st.reloading:
 			continue                          # the local reload lands on the same numbers
-		st.mag = maxi(int(mags[i]) - (_inflight if i == k.held else 0), 0)
+		st.mag = maxi(int(mags[i]) - _inflight_slots.count(i), 0)
 		st.reserve = int(res[i])
 		if i != k.held:
 			st.reloading = false
@@ -550,8 +560,9 @@ func request_swap() -> void:
 		return
 	_swap_count[sender] = _swap_count.get(sender, 0) + 1    # counted even when refused: the client matches it
 	var p: Player = net.players.get(sender)
-	if p != null and p.state == Player.ALIVE and _take_token(sender):
-		kit_for(sender).swap(now_s(), balance().swap_s * SWAP_TOL)
+	if p == null or p.state != Player.ALIVE or not _take_token(sender):
+		return                               # flood / dead: no reply (the next periodic kit carries the ack)
+	kit_for(sender).swap(now_s(), balance().swap_s * SWAP_TOL)
 	send_kit(sender, true)
 
 ## Shared checks of a melee / grenade request: finite values, sender, alive, origin near the host's eye.
@@ -577,7 +588,7 @@ func request_melee(shooter, origin, dir, t) -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	if _vet(sender, shooter, origin, dir) == null:
 		return
-	handle_melee(sender, origin, (dir as Vector3).normalized(), float(t))
+	_melee(sender, origin, (dir as Vector3).normalized(), float(t))
 
 @rpc("any_peer", "reliable")
 func request_grenade(shooter, origin, dir) -> void:
@@ -586,7 +597,7 @@ func request_grenade(shooter, origin, dir) -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	if _vet(sender, shooter, origin, dir) == null:
 		return
-	handle_grenade(sender, origin, (dir as Vector3).normalized())
+	_throw(sender, origin, (dir as Vector3).normalized())
 
 func _blocked_by_wall(from: Vector3, to: Vector3) -> bool:
 	var q := PhysicsRayQueryParameters3D.create(from, to, 1)
@@ -596,6 +607,9 @@ func _blocked_by_wall(from: Vector3, to: Vector3) -> bool:
 func handle_melee(sender: int, origin: Vector3, dir: Vector3, t: float) -> int:
 	if not Net.is_host() or _vet_pose(sender, origin, dir) == null:
 		return 0
+	return _melee(sender, origin, dir, t)
+
+func _melee(sender: int, origin: Vector3, dir: Vector3, t: float) -> int:
 	var now := now_s()
 	var m: Melee = _melees.get(sender)
 	if m == null:
@@ -628,6 +642,9 @@ func handle_melee(sender: int, origin: Vector3, dir: Vector3, t: float) -> int:
 func handle_grenade(sender: int, origin: Vector3, dir: Vector3) -> bool:
 	if not Net.is_host() or _vet_pose(sender, origin, dir) == null:
 		return false
+	return _throw(sender, origin, dir)
+
+func _throw(sender: int, origin: Vector3, dir: Vector3) -> bool:
 	var now := now_s()
 	var cd := balance().grenade_cooldown_s
 	if now < _next_throw.get(sender, -INF) - cd * SWAP_TOL:

@@ -65,3 +65,12 @@ func test_grenade_refill_cap() -> void:
 	assert_eq(inv.grenades, 3, "decremented")
 	inv.grenades = 0
 	assert_true(not inv.take_grenade(), "none left")
+
+func test_give_refuses_a_gun_already_held() -> void:
+	var inv := Inventory.new()
+	inv.give(Content.weapon(&"hornet"))
+	inv.swap(0.0)
+	assert_eq(inv.give(Content.weapon(&"hornet")), -1, "hornet is in the other slot")
+	assert_eq(inv.give(Content.weapon(&"sentinel_45")), -1, "start gun is in the held slot")
+	assert_eq(inv.held, 0, "held unchanged")
+	assert_eq(inv.slots[1].data.id, &"hornet", "kit unchanged")

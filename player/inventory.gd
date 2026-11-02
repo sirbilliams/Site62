@@ -27,8 +27,11 @@ func state_of(id: StringName) -> WeaponState:
 			return s
 	return null
 
-## A bought gun goes into an empty slot, else replaces the held one; it becomes the held gun. Returns the slot used.
+## A bought gun goes into an empty slot, else replaces the held one; it becomes the held gun. Returns the slot used,
+## or -1 (nothing changes) if the gun is already in the kit.
 func give(data: WeaponData) -> int:
+	if has_weapon(data.id):
+		return -1
 	var i := held
 	if slots[0] == null:
 		i = 0
