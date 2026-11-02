@@ -7,6 +7,8 @@ var idx := 0
 var port := 26100
 var bp := 7800
 var left_seen := 0
+var left_ids: Array = []
+var saw4 := false
 var joined_seen := 0
 var refused_reason := ""
 var claim_sent := false
@@ -28,7 +30,7 @@ func _ready() -> void:
 	bp = int(_arg("bp", "7800"))
 	Net.beacon_port = bp
 	Net.player_joined.connect(func(_id): joined_seen += 1)
-	Net.player_left.connect(func(_id): left_seen += 1)
+	Net.player_left.connect(func(id): left_seen += 1; left_ids.append(id))
 	Net.join_refused.connect(func(r): refused_reason = r)
 	if role == "host":
 		var e := Net.host(port)
@@ -64,9 +66,12 @@ func _process(dt: float) -> void:
 		return
 	t += dt
 	if role == "host":
+		if not saw4 and Net.players.ids().size() == 4:
+			saw4 = true
+			print("ROSTER 4")
 		if t > 60.0:
 			_fail("timeout ids=%d claims=%s refused=%d left=%d" % [Net.players.ids().size(), str(Net.debug_claims), Net.refused_count, left_seen])
-		elif Net.refused_count >= 1 and left_seen >= 1 and _claims_ok():
+		elif saw4 and Net.refused_count >= 1 and left_seen >= 1 and _claims_ok():
 			done = true
 			print("BASIC NET PASS")
 			get_tree().quit(0)
@@ -84,6 +89,7 @@ func _process(dt: float) -> void:
 		return
 	if Net.players.ids().size() == 4 and not claim_sent:
 		claim_sent = true
+		print("CLIENT ROSTER OK (%d)" % idx)
 		if idx == 2:
 			Net.rpc_id(1, "debug_claim", 1)
 			Net.rpc_id(1, "debug_claim", Net.local_id())
@@ -91,9 +97,17 @@ func _process(dt: float) -> void:
 			get_tree().create_timer(14.0).timeout.connect(func():
 				done = true
 				Net.leave()
+				if left_ids.has(1) and Net.players.ids().size() == 0:
+					print("CLIENT LEAVE STATE OK (3)")
+				else:
+					_fail("leave state wrong: left_ids=%s ids=%d" % [str(left_ids), Net.players.ids().size()])
+					return
 				_ok("left"))
 	if idx == 1 and left_seen >= 1 and not beacon_found and t > 20.0:
 		_fail("no beacon heard")
 	elif left_seen >= 1 and idx != 3 and (idx != 1 or beacon_found):
 		done = true
+		print("CLIENT LEFT OK (%d)" % idx)
+		if idx == 1:
+			print("BEACON OK")
 		_ok("saw player_left, ids=%d" % Net.players.ids().size())

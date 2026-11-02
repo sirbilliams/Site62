@@ -31,6 +31,8 @@ func add(id: int, pname: String) -> bool:
 	var slot := 0
 	while used.has(slot):
 		slot += 1
+	if pname == "":
+		pname = "Operative %d" % (slot + 1)
 	_players[id] = {"name": pname, "slot": slot}
 	return true
 

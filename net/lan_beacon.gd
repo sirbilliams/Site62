@@ -50,7 +50,7 @@ func _process(dt: float) -> void:
 			if typeof(d) != TYPE_DICTIONARY or d.get("g", "") != MAGIC:
 				continue
 			var p := int(d.get("port", 0))
-			var key := "%s:%d" % [ip, p]
+			var key := "%d:%s" % [p, str(d.get("name", "?"))]  # dedupe broadcast + loopback copies
 			if not _seen.has(key) or now - _seen[key] > EXPIRE:
 				found.emit(ip, p, str(d.get("name", "?")), int(d.get("players", 0)))
 			_seen[key] = now
