@@ -17,7 +17,9 @@ func _mesh(size: Vector3, color: Color) -> MeshInstance3D:
 	return mi
 
 func _expire(n: Node, secs: float) -> void:
-	get_tree().create_timer(secs).timeout.connect(func(): if is_instance_valid(n): n.queue_free())
+	await get_tree().create_timer(secs).timeout      # no lambda: a lambda capturing an already freed `n` logs an error when it fires
+	if is_instance_valid(n):
+		n.queue_free()
 
 func muzzle_flash(pos: Vector3) -> void:
 	var f := _mesh(Vector3(0.15, 0.15, 0.15), Color(1, 0.8, 0.3))

@@ -25,8 +25,11 @@ var _pending := {}                      # client: peer -> {points, state, hp} no
 
 func _ready() -> void:
 	name = "WorldSnapshot"
-	Net.player_left.connect(func(id): _ready_peers.erase(id))
+	Net.player_left.connect(_on_peer_left)
 	Net.player_joined.connect(_on_player_joined)
+
+func _on_peer_left(id: int) -> void:
+	_ready_peers.erase(id)
 
 func bind(pn: PlayerNet, svc: WeaponService, eco: EconomyService, zs: ZombieSync, pu: PowerupService, mt: Match, ms: MatchState) -> void:
 	net = pn

@@ -18,6 +18,9 @@ var zombies := {}                 # zid -> Zombie
 var queue: Array = []             # host: pending [pos, enemy_id, hp, band]
 var damage_mod := Callable()      # host: (dmg, hp) -> dmg; power-ups (Overload) hook in here
 var frozen := false               # test hook: host AI paused (snapshots keep flowing)
+var measure_snap := false         # test hook (soak): record the largest snapshot message
+var max_snap_bytes := 0
+var max_snap_zombies := 0
 var spawn_rx := 0                 # client counters (tests)
 var die_rx := 0
 var _next_zid := 1
@@ -185,6 +188,9 @@ func _send_snapshot() -> void:
 	for z: Zombie in zombies.values():
 		if z.alive and out.size() < Content.balance.max_alive:
 			out.append([z.zid, z.position, z.yaw, int(z.anim)])
+	if measure_snap:
+		max_snap_bytes = maxi(max_snap_bytes, var_to_bytes(out).size())
+		max_snap_zombies = maxi(max_snap_zombies, out.size())
 	Net.send_unreliable(self, &"_rx_snap", 0, [out])
 
 # ------------------------------------------------------------------ client

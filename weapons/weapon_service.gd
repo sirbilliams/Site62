@@ -269,7 +269,13 @@ func fire_local(dir: Vector3) -> bool:
 		return false
 	var t := now_s()
 	var st := state_for(Net.local_id())
-	if not _predict_fire(t):
+	if Net.is_host():
+		# the host's own shot is judged once, by handle_fire below; predicting it here as well would consume the round and the
+		# rate slot first and handle_fire would then reject every host shot as "rate"
+		var id := Net.local_id()
+		if kit_for(id).swap_blocked(t) or st.block_reason(t, rate_mult_of(id)) != &"":
+			return false
+	elif not _predict_fire(t):
 		return false
 	var origin := eye_of(me)
 	var seq := _peek_seq(Net.local_id()) if Net.is_host() else _shot_seq

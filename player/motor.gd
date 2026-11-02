@@ -24,6 +24,8 @@ static func step(state: Dictionary, f: InputFrame, dt: float, space: PhysicsDire
 	if space != null and delta.length() > 0.0:
 		delta = _slide(pos, delta, space)
 	pos += delta
+	if space != null and delta.length() > 0.0:
+		pos += _push_out(pos, space)
 	if grounded and (f.buttons & InputFrame.JUMP) and not (f.buttons & InputFrame.CROUCH):
 		vy = bal.jump_speed
 		grounded = false
@@ -64,3 +66,18 @@ static func _slide(pos: Vector3, delta: Vector3, space: PhysicsDirectSpaceState3
 		return delta
 	# remove the component pushing into the wall
 	return delta - n * minf(delta.dot(n), 0.0)
+
+## Grazing a wall for many steps (or a crack between two collision boxes) lets the centre ray miss; eight short rays around the
+## body push the player back out so a bot or a player cannot slip through a wall corner into the void.
+const _RING := [Vector3(1, 0, 0), Vector3(0.7071, 0, 0.7071), Vector3(0, 0, 1), Vector3(-0.7071, 0, 0.7071),
+	Vector3(-1, 0, 0), Vector3(-0.7071, 0, -0.7071), Vector3(0, 0, -1), Vector3(0.7071, 0, -0.7071)]
+
+static func _push_out(pos: Vector3, space: PhysicsDirectSpaceState3D) -> Vector3:
+	var push := Vector3.ZERO
+	var from := pos + Vector3.UP * 0.9
+	for d: Vector3 in _RING:
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, from + d * BODY_RADIUS, WORLD_MASK))
+		if not hit.is_empty():
+			push -= d * (BODY_RADIUS - (hit.position as Vector3).distance_to(from))
+	push.y = 0.0
+	return push.limit_length(BODY_RADIUS)

@@ -35,6 +35,9 @@ func _ready() -> void:
 		if a == "--test=noready":
 			add_child(load("res://tests/net/net_noready.gd").new())
 			return
+		if a == "--test=soak":
+			add_child(load("res://tests/net/net_soak.gd").new())
+			return
 		if a == "--test=shoot":
 			add_child(load("res://tests/net/net_shoot.gd").new())
 			return
@@ -47,6 +50,7 @@ var _menu: MainMenu
 var _settings: SettingsScreen
 var _game: GameRoot
 var _smoke_path := ""
+var _smoke_bot: RefCounted
 
 func _start_ui() -> void:
 	Settings.load_file()
@@ -116,18 +120,35 @@ func _back_to_menu(reason := "") -> void:
 	_menu.set_status(reason)
 	_leaving = false
 
-## Manual smoke check (tools/vrun.sh): host, press Start, wait for round 1 zombies, save a screenshot, quit.
+## Manual smoke check (tools/vrun.sh, tools/smoke_build.sh): host, press Start, wait for round `--smoke_round=N` (default 1)
+## with zombies, save a screenshot, quit. `--smoke_bot` lets the scripted SoakBot play the host (real input frames) so a
+## solo run can clear round 1.
 func _smoke() -> void:
 	Net.beacon_port = 0
+	var want_round := 1
+	var bot := false
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--smoke_round="):
+			want_round = int(a.substr(14))
+		elif a == "--smoke_bot":
+			bot = true
 	_host()
 	await get_tree().create_timer(1.5).timeout
+	if bot:
+		_smoke_bot = load("res://tests/net/soak_bot.gd").new(_game)       # kept in a member: a Callable does not keep its RefCounted alive
+		_game.net.input_source = _smoke_bot.frame
 	_game.start_match()
 	var waited := 0.0
-	while waited < 30.0 and not (_game.mt.round >= 1 and _game.zs.live_count() > 0):
+	var next_log := 10.0
+	while waited < 240.0 and not (_game.mt.round >= want_round and _game.zs.live_count() > 0):
 		await get_tree().create_timer(0.25).timeout
 		waited += 0.25
+		if waited >= next_log:
+			next_log += 10.0
+			var me := _game.net.local_player()
+			print("SMOKE t=%ds round=%d zombies=%d hp=%s state=%s pos=%s" % [int(waited), _game.mt.round, _game.zs.live_count(), str(me.hp) if me else "-", str(me.state) if me else "-", str(me.position.snapped(Vector3.ONE * 0.1)) if me else "-"])
 	await get_tree().create_timer(4.0).timeout
 	var img := get_viewport().get_texture().get_image()
 	img.save_png(_smoke_path)
 	print("SMOKE round=%d zombies=%d phase=%s saved=%s" % [_game.mt.round, _game.zs.live_count(), _game.mt.phase, _smoke_path])
-	get_tree().quit(0 if _game.mt.round >= 1 and _game.zs.live_count() > 0 else 1)
+	get_tree().quit(0 if _game.mt.round >= want_round and _game.zs.live_count() > 0 else 1)
