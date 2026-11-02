@@ -3,8 +3,8 @@ extends Node3D
 
 signal opened
 
-var zone_id: StringName
-var open: bool = false:
+@export var zone_id: StringName
+@export var open: bool = false:
 	set(v):
 		var was := open
 		open = v

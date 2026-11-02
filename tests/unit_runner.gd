@@ -27,7 +27,7 @@ func _initialize() -> void:
 		methods.sort()
 		for method in methods:
 			var inst = script.new()
-			inst.call(method)
+			await inst.call(method)
 			if inst.failures.is_empty():
 				passed += 1
 			else:
