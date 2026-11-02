@@ -8,6 +8,7 @@ extends Node
 
 const LOOKBACK := 1.0
 const MIN_ROUNDS := 5
+const MAX_RATE_REJECTS := 30      # the whole run, all peers: a few from jitter are fine, a rate bug rejects hundreds
 
 var role := ""
 var port := 26100
@@ -225,10 +226,17 @@ func _finish(over: bool, elapsed: float) -> void:
 	print("SOAK stats (host): %s" % str(game.ms.final_stats if not game.ms.final_stats.is_empty() else game.ms.stats))
 	print("SOAK zombie snapshot: max=%d bytes (%d zombies), per-client downlink includes it" % [game.zs.max_snap_bytes, game.zs.max_snap_zombies])
 	print("SOAK agreement checks=%d retries=%d elapsed=%ds game_over=%s link=rtt %s ms loss %s" % [checks, retries, int(elapsed), str(over), _arg("rtt_ms", "0"), _arg("loss", "0")])
-	var ok := rounds >= MIN_ROUNDS and checks >= 3
+	var stats: Dictionary = game.ms.final_stats if not game.ms.final_stats.is_empty() else game.ms.stats
+	var host_kills := int((stats.get(1, {}) as Dictionary).get("kills", 0))
+	var rate_rejects := 0
+	for k: String in rejects:
+		if k.ends_with("rate"):
+			rate_rejects += int(rejects[k])
+	print("SOAK host kills=%d host hits=%d rate rejects=%d (max %d)" % [host_kills, int(hits.get(1, 0)), rate_rejects, MAX_RATE_REJECTS])
+	var ok := rounds >= MIN_ROUNDS and checks >= 3 and host_kills > 0 and int(hits.get(1, 0)) > 0 and rate_rejects <= MAX_RATE_REJECTS
 	if ok:
 		print("SOAK PASS rounds=%d" % rounds)
 	else:
-		print("SOAK FAIL (host): rounds=%d checks=%d" % [rounds, checks])
+		print("SOAK FAIL (host): rounds=%d checks=%d host_kills=%d rate_rejects=%d" % [rounds, checks, host_kills, rate_rejects])
 	await get_tree().create_timer(1.0).timeout
 	get_tree().quit(0 if ok else 1)

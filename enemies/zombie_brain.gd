@@ -18,14 +18,19 @@ var _repath_in := 0.0
 var _attack_cd := WINDUP_S
 var _tear_cd := 0.0
 var _tearing: Barricade
+var watch := StallWatch.new()
+var _cross_door: BulkheadDoor     # open door whose link the zombie is crossing (committed direction in _cross_to)
+var _cross_to := Vector3.ZERO
+var walking := false          # this tick the zombie was chasing a target on foot (not meleeing, tearing or idle): the stall watchdog counts it
 
 ## True when `b` stands between a zombie at `zpos` and its target at `tpos` and the zombie is in tearing reach.
 static func wants_tear(b: Barricade, zpos: Vector3, tpos: Vector3) -> bool:
 	return b.boards > 0 and b.is_outside(zpos) and not b.is_outside(tpos) and b.distance_to(zpos) <= Barricade.TEAR_REACH
 
 ## players: peer id -> Player. barricades: Array[Barricade].
-func tick(dt: float, players: Dictionary, barricades: Array) -> void:
+func tick(dt: float, players: Dictionary, barricades: Array, doors: Array = []) -> void:
 	_clock += dt
+	walking = false
 	var target := _nearest(players)
 	if target == null:
 		z.anim = Zombie.Anim.IDLE
@@ -39,7 +44,12 @@ func tick(dt: float, players: Dictionary, barricades: Array) -> void:
 		return
 	_attack_cd = WINDUP_S
 	var link_b := _link_zone(barricades)
-	if link_b == null:                  # between the link ends the zombie is off the nav mesh: keep the path
+	var door_b := _door_zone(doors)
+	if door_b == null:
+		if _cross_door != null:
+			_cross_door = null
+			_repath_in = 0.0           # off the link: a fresh path from the mesh
+	if link_b == null and door_b == null:       # between the link ends the zombie is off the nav mesh: keep the path
 		_repath_in -= dt
 		if _repath_in <= 0.0:
 			_repath(tp)
@@ -48,7 +58,11 @@ func tick(dt: float, players: Dictionary, barricades: Array) -> void:
 			_tear(dt, b)
 			return
 	_stop_tearing()
-	_walk(dt, link_b != null)
+	walking = true
+	if door_b != null:
+		_cross(dt, door_b, tp)
+	else:
+		_walk(dt, link_b != null)
 
 func _repath(tp: Vector3) -> void:
 	_repath_in = Content.balance.repath_s
@@ -65,6 +79,41 @@ func _link_zone(barricades: Array) -> Barricade:
 			if absf(d.dot(b.outside_dir())) <= Barricade.LINK_REACH + 0.3 and absf(d.dot(b.global_transform.basis.x)) <= 1.5:
 				return b
 	return null
+
+## The open bulkhead whose link the zombie is between the ends of (off the nav mesh), or null.
+## Without this the zombie re-paths from the middle of the link: its closest mesh point flips between the two ends and a slow
+## zombie ping-pongs at the door forever (found with tools/repro_door3.gd; every zombie behind it stacks up).
+func _door_zone(doors: Array) -> BulkheadDoor:
+	for d: BulkheadDoor in doors:
+		if not d.is_open or d.link == null:
+			continue
+		var ends := d.link_ends()
+		var ab: Vector3 = ends[1] - ends[0]
+		ab.y = 0.0
+		var len2 := ab.length_squared()
+		if len2 < 0.01:
+			continue
+		var zp: Vector3 = z.position - ends[0]
+		zp.y = 0.0
+		var t := zp.dot(ab) / len2
+		var lateral := absf(zp.x * ab.z - zp.z * ab.x) / sqrt(len2)
+		if t > 0.05 and t < 0.95 and lateral <= 1.5:
+			return d
+	return null
+
+## Cross the link in one committed direction (towards the end nearer the target), straight, no path queries.
+func _cross(dt: float, door: BulkheadDoor, tp: Vector3) -> void:
+	if _cross_door != door:
+		_cross_door = door
+		var ends := door.link_ends()
+		var da := Vector2(ends[0].x - tp.x, ends[0].z - tp.z).length()
+		var db := Vector2(ends[1].x - tp.x, ends[1].z - tp.z).length()
+		_cross_to = ends[0] if da < db else ends[1]
+	var d := _cross_to - z.position
+	d.y = 0.0
+	z.anim = Zombie.Anim.WALK
+	z.position += d.normalized() * minf(z.speed() * dt, d.length())
+	_face(d)
 
 func _nearest(players: Dictionary) -> Player:
 	var best: Player = null
@@ -125,3 +174,8 @@ func _face(dir: Vector3) -> void:
 	if Vector2(dir.x, dir.z).length() > 0.01:
 		z.yaw = atan2(-dir.x, -dir.z)
 		z.rotation.y = z.yaw
+
+## Host: the zombie was put somewhere else (stall watchdog): forget the old path and the stall window.
+func relocated() -> void:
+	_repath_in = 0.0
+	watch.reset()

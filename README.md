@@ -40,7 +40,8 @@ All art is CC0 (Poly Haven and others); see [content/CREDITS.md](content/CREDITS
 
 Install the Godot 4.7.2 Linux and Windows export templates (official `Godot_v4.7.2-stable_export_templates.tpz`, checked
 against the release's `SHA512-SUMS.txt`), then run `tools/export_pc.sh`. Output goes to `build/` (gitignored). Presets:
-"Linux" and "Windows Desktop" in `export_presets.cfg`. The Windows build is exported but has not been run on Windows.
+"Linux" and "Windows Desktop" in `export_presets.cfg` (no test code), plus "Linux Smoke" (`build/Site62_smoke.x86_64`, keeps the scripted
+bot for `tools/smoke_build.sh`). The Windows build is exported but has not been run on Windows.
 
 ## Milestone 1 status / known gaps
 
@@ -50,9 +51,8 @@ compensation, down and revive, power-ups, HUD, menus, settings, game over.
 
 Known gaps:
 - One enemy type, one map, placeholder-quality animation, sound and music are minimal.
-- The soak bots exercise combat, ammo, one bulkhead door, the Requisition Crate, grenades, barricade repair and revives; they do not use the power switch, Suds machines or the Isotope Refit, and the soak ends when the bots die (rounds 5 to 7 so far), not at round 8.
-- Known bug: with the later bulkheads open, zombies can pile up in the Door_offices doorway (28, 20) and stall a round; found by the soak, not fixed yet (the soak bots therefore buy only one door).
-- Movement uses a single wall ray plus a short push-out ring; very thin or odd collision can still let a player clip, and there is no kill plane under the map.
+- The soak bots exercise combat, ammo, every bulkhead door, the Requisition Crate, grenades, barricade repair and revives; they do not use the power switch, Suds machines or the Isotope Refit, and the soak ends when the bots die (rounds 5 to 7 so far), not at round 8.
+- Movement uses a single wall ray plus a short push-out ring; very thin or odd collision can still let a player clip. A host-side kill plane (Y < -20) returns a fallen player to their last safe spot, and a zombie that stalls for 5 s is relocated to a spawn point.
 - Network model is host-authoritative on UDP with no encryption, no NAT traversal and no dedicated server.
 - Only the Linux build was launched and checked; the Windows export is untested, and neither build is signed.
 - Gamepad support is implemented but has had little hands-on play time.

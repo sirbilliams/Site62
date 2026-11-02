@@ -234,9 +234,6 @@ func _door_goal(me: Player, pos: Vector3) -> BulkheadDoor:
 	var doors: Array = g.get_tree().get_nodes_in_group(&"doors")
 	doors.sort_custom(func(a, b): return a.cost < b.cost)
 	for d: BulkheadDoor in doors:
-		if d.is_open:
-			return null          # one door only: with the later doors open, zombies jam at Door_offices (28, 20) - see the report
-	for d: BulkheadDoor in doors:
 		if d.is_open or me.points < d.cost:
 			continue
 		if _reachable(pos, d.global_position):

@@ -21,6 +21,8 @@ var frozen := false               # test hook: host AI paused (snapshots keep fl
 var measure_snap := false         # test hook (soak): record the largest snapshot message
 var max_snap_bytes := 0
 var max_snap_zombies := 0
+var kill_plane_hits := 0          # host counters (tests)
+var stall_relocations := 0
 var spawn_rx := 0                 # client counters (tests)
 var die_rx := 0
 var _next_zid := 1
@@ -176,12 +178,49 @@ func _physics_process(dt: float) -> void:
 		_spawn_now(q[0], q[1], q[2], q[3])
 	if not frozen:
 		var bars := _barricades()
+		var doors := get_tree().get_nodes_in_group(&"doors")
 		for z: Zombie in zombies.values():
 			if z.alive:
-				z.brain.tick(dt, net.players, bars)
+				z.brain.tick(dt, net.players, bars, doors)
+		guard(dt, spawn_points())
 	_tick += 1
 	if _tick % SNAP_EVERY == 0:
 		_send_snapshot()
+
+## Positions of the SpawnZones of every open zone.
+func spawn_points() -> Array:
+	var out: Array = []
+	if not is_inside_tree():
+		return out
+	for s: SpawnZone in get_tree().get_nodes_in_group(&"spawn_zones"):
+		if s.active:
+			out.append(s.global_position if s.is_inside_tree() else s.position)
+	return out
+
+## Host: kill plane and stall watchdog. A zombie below Balance.kill_plane_y is despawned and replaced by a new one (same
+## hp and band) at a spawn point, so the director's alive count stays right. A zombie chasing a live target that moved
+## less than Balance.stall_dist in Balance.stall_s is moved to a spawn point of an open zone. `points`: Array of Vector3.
+func guard(dt: float, points: Array) -> void:
+	if not Net.is_host() or points.is_empty():
+		return
+	var bal: Balance = Content.balance
+	for z: Zombie in zombies.values():
+		if not z.alive or z.brain == null:
+			continue
+		if z.position.y < bal.kill_plane_y:
+			var hp := z.hp
+			var band := z.band
+			var id: StringName = z.data.id
+			despawn(z.zid)
+			spawn(_pick(points), id, hp, band)
+			kill_plane_hits += 1
+		elif z.brain.watch.update(dt, z.position, z.brain.walking, bal.stall_s, bal.stall_dist):
+			z.position = _pick(points)
+			z.brain.relocated()
+			stall_relocations += 1
+
+func _pick(points: Array) -> Vector3:
+	return points[randi() % points.size()]
 
 func _send_snapshot() -> void:
 	var out: Array = []

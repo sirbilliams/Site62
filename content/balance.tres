@@ -49,3 +49,7 @@ grenades_start = 2
 grenades_max = 4
 grenades_round_refill = 2
 grenade_cooldown_s = 0.8
+kill_plane_y = -20.0
+safe_spot_interval_s = 0.5
+stall_s = 5.0
+stall_dist = 0.5

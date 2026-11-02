@@ -37,6 +37,11 @@ func use(_player: Player) -> bool:
 		Net.send_reliable(self, &"_rx_open", 0, [])
 	return true
 
+## World positions of the navigation link's two ends [start, end].
+func link_ends() -> Array:
+	var t: Transform3D = link.global_transform if link.is_inside_tree() else transform * link.transform
+	return [t * link.start_position, t * link.end_position]
+
 ## Door state only (client mirror and host).
 func set_open(v: bool) -> void:
 	is_open = v

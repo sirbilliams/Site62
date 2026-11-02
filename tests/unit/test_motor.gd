@@ -60,3 +60,63 @@ func test_link_sim_drop_and_delay() -> void:
 	ls.submit(func(): pass)
 	assert_eq(ls.pending(), 1, "queued")
 	ls.free()
+
+# ---- _push_out (needs a real physics space: a wall box on layer 1 in the main loop's world)
+func _wall(x_face: float) -> StaticBody3D:
+	var b := StaticBody3D.new()
+	b.collision_layer = 1
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(1, 3, 10)
+	cs.shape = bs
+	b.add_child(cs)
+	b.position = Vector3(x_face + 0.5, 1.5, 0)
+	return b
+
+func _space() -> PhysicsDirectSpaceState3D:
+	var tree := Engine.get_main_loop() as SceneTree
+	for i in 3:
+		await tree.physics_frame
+	return tree.root.get_world_3d().direct_space_state
+
+func test_push_out_moves_a_body_off_a_wall() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var w := _wall(0.5)                                  # wall face at x = 0.5
+	tree.root.add_child(w)
+	var space: PhysicsDirectSpaceState3D = await _space()
+	var free_push: Vector3 = Motor._push_out(Vector3(-2, 0, 0), space)
+	assert_eq(free_push, Vector3.ZERO, "clear of the wall: no push")
+	var push: Vector3 = Motor._push_out(Vector3(0.3, 0, 0), space)      # 0.2 from the face, radius 0.35
+	assert_near(push.x, -0.245, 0.005, "pushed back: the 0.15 straight-on overlap plus the two diagonal rays")
+	assert_near(push.y, 0.0, 1e-6, "horizontal only")
+	assert_near(push.z, 0.0, 0.001, "no sideways push on a flat wall")
+	var close: Vector3 = Motor._push_out(Vector3(0.45, 0, 0), space)    # 0.05 from the face: every wall-side ray hits
+	assert_near(close.length(), Motor.BODY_RADIUS, 1e-4, "capped at the body radius")
+	assert_true(close.x < 0.0, "away from the wall")
+	w.free()
+
+func test_step_into_a_wall_never_ends_inside_it() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var w := _wall(2.0)
+	tree.root.add_child(w)
+	var fl := StaticBody3D.new()
+	fl.collision_layer = 1
+	var fcs := CollisionShape3D.new()
+	var fbs := BoxShape3D.new()
+	fbs.size = Vector3(40, 2, 40)
+	fcs.shape = fbs
+	fl.add_child(fcs)
+	fl.position = Vector3(0, -1, 0)
+	tree.root.add_child(fl)
+	var space: PhysicsDirectSpaceState3D = await _space()
+	var s := Motor.initial_state(Vector3.ZERO)
+	var f := InputFrame.new()
+	f.move = Vector2(1, 0)                               # strafe +x into the wall
+	f.look_yaw = 0.0
+	for i in 180:
+		f.seq = i
+		s = Motor.step(s, f, 1.0 / 60.0, space, Content.balance)
+	assert_true(s.pos.x <= 2.0 - Motor.BODY_RADIUS + 0.05, "stopped at the wall, x=%f" % s.pos.x)
+	assert_true(s.pos.x > 1.0, "and did reach it, x=%f" % s.pos.x)
+	w.free()
+	fl.free()

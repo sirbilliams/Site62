@@ -17,6 +17,8 @@ var input_source := Callable()   # () -> InputFrame (move/buttons/look); default
 var local_buttons := 0           # buttons of the last local frame (weapon service reads FIRE/RELOAD)
 var clock := ClockSync.new()     # host: per-peer client clock model
 var last_buttons := {}            # host: peer id -> buttons of the latest applied frame
+var falls := 0                    # host: kill-plane returns (tests)
+var _guards := {}                # host: peer id -> FallGuard
 var _seq := 0
 var _recent: Array = []          # last BATCH sent frames as arrays
 var _last_seq := {}              # host: peer id -> last applied seq
@@ -85,6 +87,7 @@ func _sync_roster() -> void:
 			players.erase(id)
 			_last_seq.erase(id)
 			_credit.erase(id)
+			_guards.erase(id)
 			clock.forget(id)
 			last_buttons.erase(id)
 
@@ -105,9 +108,23 @@ func _physics_process(_dt: float) -> void:
 		_local_tick(me)
 	if Net.is_host():
 		_refill_credit()
+		_guard_falls()
 		_tick += 1
 		if _tick % SNAP_EVERY == 0:
 			_send_snapshot()
+
+## Host kill plane: a player below Balance.kill_plane_y goes back to their last safe grounded spot (no death).
+func _guard_falls() -> void:
+	var bal: Balance = Content.balance
+	for id in players:
+		var p: Player = players[id]
+		var g: FallGuard = _guards.get(id)
+		if g == null:
+			g = FallGuard.new(p.motor_state.pos)
+			_guards[id] = g
+		if g.step(DT, p.motor_state.pos, p.motor_state.grounded, bal.kill_plane_y, bal.safe_spot_interval_s):
+			p.teleport(g.safe)
+			falls += 1
 
 func _local_tick(me: Player) -> void:
 	var f: InputFrame = input_source.call() if input_source.is_valid() else _sample_keyboard()

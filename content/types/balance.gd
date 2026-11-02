@@ -46,3 +46,7 @@ extends Resource
 @export var grenades_max: int = 4
 @export var grenades_round_refill: int = 2
 @export var grenade_cooldown_s: float = 0.8
+@export var kill_plane_y: float = -20.0          # host: below this a player returns to a safe spot, a zombie is replaced
+@export var safe_spot_interval_s: float = 0.5    # host: how often a grounded player's position is remembered as safe
+@export var stall_s: float = 5.0                 # host: a zombie with a live target that moves less than stall_dist in this long is relocated
+@export var stall_dist: float = 0.5
