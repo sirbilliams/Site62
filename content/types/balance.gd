@@ -30,4 +30,5 @@ extends Resource
 @export var max_shot_range: float = 100.0
 @export var barricade_boards: int = 6
 @export var use_range: float = 2.0
+@export var use_min_interval_s: float = 0.1
 @export var repath_s: float = 0.5

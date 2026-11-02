@@ -386,22 +386,28 @@ func _wall_dist(origin: Vector3, dir: Vector3) -> float:
 	var r := get_world_3d().direct_space_state.intersect_ray(q)
 	return INF if r.is_empty() else origin.distance_to(r.position)
 
-func _trace(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float, st_time: float, ws: WeaponState) -> void:
+## Nearest live target the ray hits at rewound time `st_time`: {found, t, id, head}. Corpses never absorb a bullet.
+func pick_target(origin: Vector3, dir: Vector3, st_time: float) -> Dictionary:
 	var max_d := balance().max_shot_range
-	var best_t := INF
-	var best_id := 0                 # 0 is never an id (peers > 0, zombies < 0, dummy 1000)
-	var found := false
-	var best_head := false
+	var out := {"found": false, "t": INF, "id": 0, "head": false}     # id 0 is never used (peers > 0, zombies < 0, dummy 1000)
 	for id in targets:
+		var tg: HitTarget = targets[id]
+		if not tg.alive:
+			continue
 		var pose = history.pose_at(id, st_time)
 		if pose == null:
 			continue
-		var h: Dictionary = (targets[id] as HitTarget).ray_at(pose, origin, dir)
-		if not h.is_empty() and h.t < best_t and h.t <= max_d:
-			best_t = h.t
-			best_id = id
-			found = true
-			best_head = h.head
+		var h: Dictionary = tg.ray_at(pose, origin, dir)
+		if not h.is_empty() and h.t < out.t and h.t <= max_d:
+			out = {"found": true, "t": h.t, "id": id, "head": h.head}
+	return out
+
+func _trace(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float, st_time: float, ws: WeaponState) -> void:
+	var pick := pick_target(origin, dir, st_time)
+	var best_t: float = pick.t
+	var best_id: int = pick.id
+	var found: bool = pick.found
+	var best_head: bool = pick.head
 	if not found:
 		_reply(sender, t, MISS, &"", 0, 0.0, false)
 		return

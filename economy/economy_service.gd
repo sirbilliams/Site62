@@ -9,6 +9,7 @@ signal purchase(player: int, what: StringName, cost: int)
 signal denied(path: String, reason: StringName)       # the local player's last use request was refused
 
 var net: PlayerNet
+var zombies_sync: ZombieSync
 var weapons: WeaponService
 var players := {}                         # peer id -> Player (the PlayerNet dictionary once bound)
 var wallets := {}                         # host: peer id -> Wallet
@@ -16,6 +17,7 @@ var double_source := Callable()           # () -> bool; Task 10 power-ups drive 
 var last_denied := &""                    # client: reason of the latest refusal
 var denied_count := 0
 var _hooked := {}                         # Barricade -> true
+var _last_use := {}                       # peer -> msec of the last accepted use request
 
 func _ready() -> void:
 	name = "EconomyService"
@@ -25,6 +27,8 @@ func bind(pn: PlayerNet, svc: WeaponService, zs: ZombieSync) -> void:
 	net = pn
 	players = pn.players
 	weapons = svc
+	zombies_sync = zs
+	Net.player_left.connect(func(id): wallets.erase(id); _last_use.erase(id))
 	svc.hit.connect(on_hit)
 	zs.zombie_died.connect(func(_zid, killer, head, melee, _p): on_kill(killer, head, melee))
 
@@ -50,6 +54,10 @@ func _changed(peer: int) -> void:
 func on_hit(shooter: int, target: int, _dmg: float, _head: bool) -> void:
 	if target >= 0 or not _known(shooter):
 		return
+	if zombies_sync != null:
+		var z: Zombie = zombies_sync.zombies.get(Zombie.zid_of(target))
+		if z == null or not z.alive:
+			return                          # corpse / despawned: no points
 	wallet(shooter).add(Content.balance.pts_hit, _double())
 	_changed(shooter)
 
@@ -73,10 +81,24 @@ func reset_round() -> void:
 		w.reset_round()
 
 func _hook_barricades() -> void:
+	for b in _hooked.keys():
+		if not is_instance_valid(b):
+			_hooked.erase(b)
 	for b: Barricade in get_tree().get_nodes_in_group(&"barricades"):
-		if not _hooked.has(b):
-			_hooked[b] = true
-			b.board_repaired.connect(on_board)
+		hook_barricade(b)
+
+func hook_barricade(b: Barricade) -> void:
+	if not _hooked.has(b):
+		_hooked[b] = true
+		b.board_repaired.connect(on_board)
+
+## Per-peer flood limit: one accepted request per Balance.use_min_interval_s.
+func use_allowed(peer: int, now_ms: int) -> bool:
+	var last: int = _last_use.get(peer, -1000000)
+	if now_ms - last < int(Content.balance.use_min_interval_s * 1000.0):
+		return false
+	_last_use[peer] = now_ms
+	return true
 
 func _physics_process(_dt: float) -> void:
 	if multiplayer.multiplayer_peer == null or multiplayer.multiplayer_peer is OfflineMultiplayerPeer or not Net.is_host():
@@ -101,7 +123,7 @@ func request_use(player, path) -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	if sender == 0 or typeof(player) != TYPE_INT or typeof(path) != TYPE_NODE_PATH:
 		return
-	if not Net.sender_is(player):
+	if not Net.sender_is(player) or not use_allowed(sender, Time.get_ticks_msec()):
 		return
 	var it := get_node_or_null(path) as Interactable
 	var p: Player = players.get(sender)

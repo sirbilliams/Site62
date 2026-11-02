@@ -101,3 +101,57 @@ func test_wall_buy_rejects_non_wall_weapon() -> void:
 	assert_eq(e.handle_use(1, w, Vector3.ZERO), &"invalid")
 	w.free()
 	_free(e)
+
+func test_hit_on_dead_or_gone_zombie_pays_nothing() -> void:
+	var e := _setup()
+	var zs := ZombieSync.new()
+	e.zombies_sync = zs
+	var z := Zombie.new()
+	zs.zombies[5] = z
+	e.wallet(1).points = 0
+	e.on_hit(1, Zombie.hit_id(5), 10.0, false)
+	assert_eq(e.wallet(1).points, 10, "live zombie pays")
+	z.alive = false
+	e.on_hit(1, Zombie.hit_id(5), 10.0, false)
+	assert_eq(e.wallet(1).points, 10, "corpse pays nothing")
+	e.on_hit(1, Zombie.hit_id(6), 10.0, false)
+	assert_eq(e.wallet(1).points, 10, "despawned zombie pays nothing")
+	z.free(); zs.free()
+	_free(e)
+
+func test_use_flood_limit() -> void:
+	var e := _setup()
+	assert_true(e.use_allowed(1, 1000), "first")
+	assert_true(not e.use_allowed(1, 1050), "50 ms later: dropped")
+	assert_true(e.use_allowed(2, 1050), "other peer unaffected")
+	assert_true(e.use_allowed(1, 1100), "100 ms later")
+	_free(e)
+
+func test_bind_wiring_with_real_signals() -> void:
+	var e := _setup()
+	var pn := PlayerNet.new()
+	var zs := ZombieSync.new()
+	var old: Array = e.players.values()
+	e.bind(pn, e.weapons, zs)
+	var p: Player = Player.new()
+	p.peer_id = 3
+	pn.players[3] = p
+	assert_true(e.players.has(3), "players shared with PlayerNet")
+	var z := Zombie.new()
+	zs.zombies[9] = z
+	e.wallet(3).points = 0
+	e.weapons.hit.emit(3, Zombie.hit_id(9), 20.0, false)
+	assert_eq(e.wallet(3).points, 10, "hit")
+	zs.zombie_died.emit(9, 3, true, false, Vector3.ZERO)
+	assert_eq(e.wallet(3).points, 110, "killing headshot: hit + kill + bonus")
+	var b := Barricade.new()
+	e.hook_barricade(b)
+	b.tear_one()
+	b.repair_one(3)
+	assert_eq(e.wallet(3).points, 120, "board")
+	Net.player_left.emit(3)
+	assert_true(not e.wallets.has(3), "wallet dropped on leave")
+	for o in old:
+		o.free()
+	b.free(); z.free(); pn.free(); zs.free()
+	_free(e)           # frees p through the shared players dict
