@@ -32,11 +32,18 @@ func _ready() -> void:
 	name = "Match"
 	Net.player_joined.connect(_on_player_joined)
 
+func _exit_tree() -> void:
+	if Net.player_joined.is_connected(_on_player_joined):
+		Net.player_joined.disconnect(_on_player_joined)
+
 func state() -> Dictionary:
 	return {"round": round, "phase": String(phase)}
 
 ## Host: wire everything under `map_root` and begin round 1.
 func start(map_root: Node) -> void:
+	if not Net.is_host():
+		push_warning("Match.start ignored: only the host runs the match")
+		return
 	stop()
 	_zones.clear()
 	_spawn_zones.clear()

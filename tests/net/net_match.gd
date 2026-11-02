@@ -262,4 +262,9 @@ func _physics_process(dt: float) -> void:
 		return
 	if not sent_hello and net.local_player() != null and frames > 30:
 		sent_hello = true
+		mt.start(get_node("Map"))                 # must be ignored on a client
+		if mt.director != null or mt.running:
+			_fail("client Match.start built a director")
+			return
+		print("MATCH NET CLIENT GUARD OK")
 		_hello.rpc_id(1)
