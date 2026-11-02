@@ -50,6 +50,10 @@ func _process(dt: float) -> void:
 			if typeof(d) != TYPE_DICTIONARY or d.get("g", "") != MAGIC:
 				continue
 			var p := int(d.get("port", 0))
+			if p < 1 or p > 65535:
+				continue
+			if _seen.size() >= 64:
+				_seen.clear()                              # a spammer cannot grow this without bound
 			var key := "%d:%s" % [p, str(d.get("name", "?"))]  # dedupe broadcast + loopback copies
 			if not _seen.has(key) or now - _seen[key] > EXPIRE:
 				found.emit(ip, p, str(d.get("name", "?")), int(d.get("players", 0)))

@@ -123,7 +123,11 @@ func _stop_beacon() -> void:
 		_beacon.queue_free()
 		_beacon = null
 
+const MAX_GAMES := 16
+
 func _on_found(ip: String, port: int, host_name: String, players: int) -> void:
+	if port < 1 or port > 65535 or _games.size() >= MAX_GAMES:
+		return
 	for g in _games:
 		if g[0] == ip and g[1] == port:
 			return

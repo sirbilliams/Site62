@@ -64,7 +64,7 @@ func _ready() -> void:
 	Net.player_left.connect(_forget_peer)
 
 func _forget_peer(id: int) -> void:
-	for d in [_melees, _next_throw, _swap_count, kits, _bucket, _counters]:
+	for d in [_melees, _next_throw, _swap_count, kits, _bucket, _counters, last_melee]:
 		d.erase(id)
 
 static func now_s() -> float:
@@ -468,8 +468,8 @@ func request_fire(shooter, origin, dir, t, _client_seq = 0) -> void:
 	if not Net.is_host():
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	if sender == 0:
-		return                               # a local call is not a request
+	if sender == 0 or not Net.players.has(sender):
+		return                               # a local call is not a request; a refused peer is not in the roster
 	if not _take_token(sender):
 		return                               # flood: dropped silently
 	var seq := _next_seq(sender)           # the host counts requests itself; the client's seq is ignored
@@ -486,7 +486,7 @@ func request_reload() -> void:
 	if not Net.is_host():
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	if sender == 0 or not _take_token(sender) or not net.players.has(sender):
+	if sender == 0 or not Net.players.has(sender) or not _take_token(sender) or not net.players.has(sender):
 		return
 	_start_reload_for(sender)
 
@@ -617,7 +617,7 @@ func request_swap() -> void:
 	if not Net.is_host():
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	if sender == 0:
+	if sender == 0 or not Net.players.has(sender):
 		return
 	_swap_count[sender] = _swap_count.get(sender, 0) + 1    # counted even when refused: the client matches it
 	var p: Player = net.players.get(sender)
@@ -628,7 +628,7 @@ func request_swap() -> void:
 
 ## Shared checks of a melee / grenade request: finite values, sender, alive, origin near the host's eye.
 func _vet(sender: int, shooter, origin, dir) -> Player:
-	if sender == 0 or not _take_token(sender):
+	if sender == 0 or not Net.players.has(sender) or not _take_token(sender):
 		return null
 	if not (_vec(origin) and _vec(dir)) or typeof(shooter) != TYPE_INT or not Net.sender_is(shooter):
 		return null

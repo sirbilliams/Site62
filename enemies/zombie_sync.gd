@@ -104,6 +104,11 @@ func despawn(zid: int) -> void:
 	z.alive = false
 	_finish(zid, z.position)
 
+## Host: remove every live zombie without kills (game over).
+func despawn_all() -> void:
+	for zid in zombies.keys():
+		despawn(zid)
+
 func _finish(zid: int, pos: Vector3) -> void:
 	var z: Zombie = zombies.get(zid)
 	if z != null and z.brain != null:

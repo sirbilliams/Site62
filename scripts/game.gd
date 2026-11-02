@@ -84,13 +84,27 @@ func apply_snapshot(d: Dictionary) -> void:
 
 func give_voucher(peer: int) -> void:
 	vouchers[peer] = true
+	if Net.is_host():
+		Net.send_reliable(self, &"_rx_voucher", 0, [peer, true])
 
 func has_voucher(peer: int) -> bool:
 	return vouchers.get(peer, false)
 
 ## Host: use up the voucher; true if there was one.
 func take_voucher(peer: int) -> bool:
-	return vouchers.erase(peer)
+	var had := vouchers.erase(peer)
+	if had and Net.is_host():
+		Net.send_reliable(self, &"_rx_voucher", 0, [peer, false])
+	return had
+
+@rpc("authority", "reliable")
+func _rx_voucher(peer, has) -> void:
+	if Net.is_host() or typeof(peer) != TYPE_INT or typeof(has) != TYPE_BOOL:
+		return
+	if has:
+		vouchers[peer] = true
+	else:
+		vouchers.erase(peer)
 
 # ---------------------------------------------------------------- power (host)
 

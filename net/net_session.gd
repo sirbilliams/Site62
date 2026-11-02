@@ -6,6 +6,7 @@ signal player_left(id: int)
 signal session_ready()
 signal join_refused(reason: String)
 signal join_failed()
+signal host_lost()                # client: the host quit or the link dropped (emitted before leave())
 
 const HOST_ID := 1
 var players := PlayerRegistry.new()
@@ -14,6 +15,7 @@ var refused_count := 0           # host: number of refused joiners
 var debug_claims := {}           # host, debug only: sender id -> ["rejected:3", ...]
 var _beacon: LanBeacon
 var _ready_emitted := false
+var accepting := true            # host: false after game over (new connections are refused with "over")
 var link_sim := LinkSim.new()
 var require_ready := false       # host: peer-0 (broadcast) game messages go only to peers that finished loading (mark_ready)
 var _ready_peers := {}
@@ -23,13 +25,16 @@ func _ready() -> void:
 	add_child(link_sim)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
-	multiplayer.server_disconnected.connect(leave)
+	multiplayer.server_disconnected.connect(func():
+		host_lost.emit()
+		leave())
 	multiplayer.connection_failed.connect(func():
 		leave()
 		join_failed.emit())
 
 func host(port: int) -> Error:
 	leave()
+	accepting = true
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(port, 8)  # headroom so a 5th peer can connect and be told "full"
 	if err != OK:
@@ -69,8 +74,16 @@ func ready_peers() -> Array:
 			out.append(id)
 	return out
 
+## Host: the match is over. Stop the LAN advertisement and refuse every new connection.
+func close_joins() -> void:
+	accepting = false
+	if _beacon:
+		_beacon.queue_free()
+		_beacon = null
+
 func leave() -> void:
 	require_ready = false
+	accepting = true
 	_ready_peers.clear()
 	var me := local_id()
 	if _beacon:
@@ -136,9 +149,9 @@ func _do_send(node: Node, method: StringName, peer: int, args: Array) -> void:
 func _on_peer_connected(id: int) -> void:
 	if not is_host():
 		return
-	if players.is_full():
+	if players.is_full() or not accepting:
 		refused_count += 1
-		_refuse.rpc_id(id, "full")
+		_refuse.rpc_id(id, "full" if players.is_full() else "over")
 		get_tree().create_timer(0.5).timeout.connect(func():
 			var p: ENetMultiplayerPeer = multiplayer.multiplayer_peer as ENetMultiplayerPeer
 			if p:

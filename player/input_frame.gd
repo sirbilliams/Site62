@@ -16,6 +16,7 @@ const NEXT_WEAPON := 512
 var seq := 0
 var move := Vector2.ZERO      # x = right, y = forward
 var look_yaw := 0.0
+const MAX_PITCH := 1.4         # rad; the host never trusts a larger look pitch
 var look_pitch := 0.0
 var buttons := 0
 var t := 0.0                  # client clock (s)
@@ -37,7 +38,7 @@ static func from_array(a) -> InputFrame:
 	f.seq = int(a[0])
 	f.move = Vector2(float(a[1]), float(a[2])).limit_length(1.0)
 	f.look_yaw = float(a[3])
-	f.look_pitch = float(a[4])
+	f.look_pitch = clampf(float(a[4]), -MAX_PITCH, MAX_PITCH)
 	f.buttons = int(a[5]) & 1023
 	f.t = float(a[6])
 	return f

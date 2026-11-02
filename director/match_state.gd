@@ -322,6 +322,12 @@ func _count(id: int, key: String) -> void:
 func _rx_game_over(s) -> void:
 	if Net.is_host() or typeof(s) != TYPE_DICTIONARY or game_over:
 		return
+	apply_game_over(s)
+
+## Client: take the final stats (game over message or the late join WorldSnapshot). Validates every field.
+func apply_game_over(s) -> void:
+	if Net.is_host() or typeof(s) != TYPE_DICTIONARY or game_over:
+		return
 	var clean := {}
 	for k in s:
 		var v = s[k]

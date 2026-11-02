@@ -34,6 +34,7 @@ var _resume: Button
 var _settings: SettingsScreen
 var _built := false
 var _left := false
+var _is_client := false          # cached at build: Net.leave() swaps in an offline peer (is_host() true) before player_left(1) fires
 
 func _ready() -> void:
 	name = "GameRoot"
@@ -89,6 +90,7 @@ func _ready() -> void:
 	ms.game_over_reached.connect(_on_game_over)
 	Net.player_left.connect(_on_left)
 	_built = true
+	_is_client = not Net.is_host()
 	if Net.is_host():
 		Net.require_ready = true                    # broadcasts only reach peers that sent `ready`
 		lobby.set_host(true)
@@ -171,9 +173,13 @@ func _on_game_over(stats: Dictionary) -> void:
 	hud.visible = false
 	_pause.visible = false
 	paused = false
+	if Net.is_host():                               # the match is over: no more spawns or rounds, no new joins
+		mt.stop()
+		zs.despawn_all()
+		Net.close_joins()
 
 func _on_left(id: int) -> void:
-	if id == 1 and not Net.is_host():
+	if id == 1 and _is_client:
 		_leave("The host left the game.")
 	elif _built:
 		_refresh_lobby()

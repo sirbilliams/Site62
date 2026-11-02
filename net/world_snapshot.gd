@@ -77,6 +77,9 @@ func capture() -> Dictionary:
 	for id in Net.players.ids():
 		ids.append(id)
 	var d := {"game": Game.snapshot(ids), "zones": [], "doors": [], "crates": [], "boards": [], "players": {}}
+	if life != null and life.game_over:
+		d["game_over"] = true
+		d["final_stats"] = life.final_stats
 	if match_node != null:
 		d["round"] = match_node.round
 		d["phase"] = String(match_node.phase)
@@ -126,6 +129,8 @@ func apply(d: Dictionary) -> void:
 		match_node.apply_state(d.round, d.get("phase"))
 	if d.get("game") is Dictionary:
 		Game.apply_snapshot(d.game)
+	if life != null and d.get("game_over") == true and d.get("final_stats") is Dictionary:
+		life.apply_game_over(d.final_stats)
 	var open_zones: Array = d.get("zones", []) if d.get("zones") is Array else []
 	for z: Zone in _zones():
 		if String(z.zone_id) in open_zones:

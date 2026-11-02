@@ -1,7 +1,8 @@
 extends Node3D
 
 func _ready() -> void:
-	for a in OS.get_cmdline_user_args():
+	# --test=* and --smoke=* are developer hooks: only in debug builds (editor / debug export) or the "smoke" feature export
+	for a in (OS.get_cmdline_user_args() if OS.is_debug_build() else PackedStringArray()):
 		if a == "--test=basic":
 			add_child(load("res://tests/net/net_basic.gd").new())
 			return
@@ -37,6 +38,12 @@ func _ready() -> void:
 			return
 		if a == "--test=soak":
 			add_child(load("res://tests/net/net_soak.gd").new())
+			return
+		if a == "--test=hostquit":
+			add_child(load("res://tests/net/net_hostquit.gd").new())
+			return
+		if a == "--test=gameover":
+			add_child(load("res://tests/net/net_gameover.gd").new())
 			return
 		if a == "--test=shoot":
 			add_child(load("res://tests/net/net_shoot.gd").new())
@@ -74,7 +81,8 @@ func _start_ui() -> void:
 	_menu_layer.add_child(_settings)
 	Net.join_refused.connect(func(why): _back_to_menu("The host refused the connection (%s)." % why))
 	Net.join_failed.connect(func(): _back_to_menu("Could not reach the host."))
-	for a in OS.get_cmdline_user_args():
+	Net.host_lost.connect(func(): _back_to_menu("The host left the game."))
+	for a in (OS.get_cmdline_user_args() if (OS.is_debug_build() or OS.has_feature("smoke")) else PackedStringArray()):
 		if a.begins_with("--smoke="):
 			_smoke_path = a.substr(8)
 			_smoke.call_deferred()
