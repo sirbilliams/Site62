@@ -69,6 +69,13 @@ func on_kill(killer: int, headshot: bool, melee: bool) -> void:
 	wallet(killer).add(n, _double())
 	_changed(killer)
 
+## Host: a flat award (power-ups). Double points applies when active.
+func award(peer: int, n: int) -> void:
+	if not _known(peer):
+		return
+	wallet(peer).add(n, _double())
+	_changed(peer)
+
 func on_board(by: int) -> void:
 	if not _known(by):
 		return

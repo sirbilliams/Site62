@@ -16,6 +16,7 @@ var net: PlayerNet
 var svc: WeaponService
 var zombies := {}                 # zid -> Zombie
 var queue: Array = []             # host: pending [pos, enemy_id, hp, band]
+var damage_mod := Callable()      # host: (dmg, hp) -> dmg; power-ups (Overload) hook in here
 var frozen := false               # test hook: host AI paused (snapshots keep flowing)
 var spawn_rx := 0                 # client counters (tests)
 var die_rx := 0
@@ -113,6 +114,8 @@ func _damage(by: int, target: int, dmg: float, head: bool, melee: bool) -> void:
 		return
 	var z: Zombie = zombies.get(Zombie.zid_of(target))
 	if z != null:
+		if damage_mod.is_valid() and z.alive:
+			dmg = float(damage_mod.call(dmg, z.hp))
 		z.take_damage(dmg, by, head, melee)
 
 func _schedule_remove(zid: int) -> void:

@@ -7,4 +7,4 @@ script = ExtResource("1")
 id = &"fortify"
 display_name = "Fortify"
 kind = &"fortify"
-duration_s = 30.0
+duration_s = 0.0
