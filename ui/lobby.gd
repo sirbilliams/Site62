@@ -106,7 +106,13 @@ func refresh(ids: Array) -> void:
 		var n := UiTheme.body(Hud.player_name(id) if id != Net.local_id() else Hud.player_name(id) + "  (YOU)", 28)
 		n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		r.add_child(n)
-		r.add_child(UiTheme.body("HOST" if id == 1 else "READY", 22, UiTheme.DIM if id != 1 else UiTheme.AMBER))
+		var status := "HOST"
+		if id != 1:
+			if id == Net.local_id() or (Net.is_host() and Net.is_ready(id)):
+				status = "READY"
+			else:
+				status = "LOADING" if Net.is_host() else "CONNECTED"
+		r.add_child(UiTheme.body(status, 22, UiTheme.AMBER if id == 1 else UiTheme.DIM))
 		_list.add_child(r)
 	for i in range(ids.size(), 4):
 		var e := UiTheme.body("%02d   -  open  -" % (i + 1), 26, Color(0.25, 0.36, 0.27))

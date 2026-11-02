@@ -104,6 +104,10 @@ func _build_map() -> void:
 	door.unlocks = [&"lab"]
 	door.position = SPAWN + Vector3(0, -0.2, 1.8)
 	add_child(door)
+	var bar := Barricade.new()                      # local +Z is outside; the players stand on the inside
+	bar.name = "Bar"
+	bar.position = SPAWN + Vector3(-1.5, 0, 1.0)
+	add_child(bar)
 
 func _fail(msg: String) -> void:
 	print("ECONOMY NET FAIL (%s): %s" % [role, msg])
@@ -222,14 +226,41 @@ func _host_step() -> void:
 						and _check(loser.points == 1000 and loser.denied == "already_open", "s4 loser view %s" % str(loser))):
 					return
 				print("ECONOMY NET DOOR OK")
-				_go("finish")
+				bar0 = eco.wallet(_peer("a")).points
+				bar_b0 = eco.wallet(_peer("b")).points
+				(get_node("Bar") as Barricade).tear_one()
+				_cmd_to("a", "repair")
+				_go("s5")
 			elif age > 10.0:
 				_fail("no s4 reports")
+		"s5":
+			var bar: Barricade = get_node("Bar")
+			if age > SETTLE_S:
+				if not (_check(bar.boards == bar.max_boards, "s5 board not repaired: %d" % bar.boards)
+						and _check(eco.wallet(_peer("a")).points == bar0 + Content.balance.pts_board, "s5 repair points")):
+					return
+				bar0 = eco.wallet(_peer("a")).points
+				for i in 3:
+					bar.tear_one()
+				_cmd_to("a", "repair_abuse")
+				_go("s6")
+		"s6":
+			var bar: Barricade = get_node("Bar")
+			if age > SETTLE_S + 1.0:
+				if not (_check(bar.boards == bar.max_boards - 3 + 1, "s6 flood: exactly one board expected, boards=%d" % bar.boards)
+						and _check(eco.wallet(_peer("a")).points == bar0 + Content.balance.pts_board, "s6 flood points %d" % eco.wallet(_peer("a")).points)
+						and _check(eco.wallet(_peer("b")).points == bar_b0, "s6 spoofed repair paid b")):
+					return
+				print("ECONOMY NET REPAIR OK")
+				_go("finish")
 		"finish":
 			if age > 1.5:
 				print("ECONOMY NET PASS")
 				done = true
 				get_tree().quit(0)
+
+var bar0 := 0
+var bar_b0 := 0
 
 func _ask(r: String, step: String) -> void:
 	reports.erase(r)
@@ -254,6 +285,14 @@ func _cmd(c: String) -> void:
 		eco.use_local(get_node("Near"))
 	elif c == "use_far":
 		eco.use_local(get_node("Far"))
+	elif c == "repair":
+		eco.repair_local(get_node("Bar"))
+	elif c == "repair_abuse":
+		for i in 4:                                  # same frame: only the first passes the per-peer flood limit
+			eco.repair_local(get_node("Bar"))
+		for id in Net.players.ids():                 # claim to be another player: the host drops it
+			if id != 1 and id != Net.local_id():
+				eco.request_repair.rpc_id(1, id, get_node("Bar").get_path())
 	elif c == "use_door":
 		eco.use_local(get_node("Door"))
 	elif c.begins_with("report:"):

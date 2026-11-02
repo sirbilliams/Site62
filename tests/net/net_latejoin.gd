@@ -94,6 +94,7 @@ func _ready() -> void:
 		zs.frozen = true
 		if Net.host(port) != OK:
 			_fail("host failed")
+		Net.require_ready = ws != null
 	elif Net.join("127.0.0.1", port) != OK:
 		_fail("join failed")
 

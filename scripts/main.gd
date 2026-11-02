@@ -32,6 +32,9 @@ func _ready() -> void:
 		if a == "--test=latejoin":
 			add_child(load("res://tests/net/net_latejoin.gd").new())
 			return
+		if a == "--test=noready":
+			add_child(load("res://tests/net/net_noready.gd").new())
+			return
 		if a == "--test=shoot":
 			add_child(load("res://tests/net/net_shoot.gd").new())
 			return
@@ -95,7 +98,12 @@ func _enter_game() -> void:
 	_game.leave_requested.connect(_back_to_menu)
 	add_child(_game)
 
+var _leaving := false
+
 func _back_to_menu(reason := "") -> void:
+	if _leaving:                                      # Net.leave() emits player_left, which can ask to leave again
+		return
+	_leaving = true
 	if Net.session_ready.is_connected(_enter_game):
 		Net.session_ready.disconnect(_enter_game)
 	Net.leave()
@@ -106,6 +114,7 @@ func _back_to_menu(reason := "") -> void:
 	_settings.visible = false
 	_menu.visible = true
 	_menu.set_status(reason)
+	_leaving = false
 
 ## Manual smoke check (tools/vrun.sh): host, press Start, wait for round 1 zombies, save a screenshot, quit.
 func _smoke() -> void:

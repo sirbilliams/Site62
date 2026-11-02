@@ -26,6 +26,7 @@ var _pending := {}                      # client: peer -> {points, state, hp} no
 func _ready() -> void:
 	name = "WorldSnapshot"
 	Net.player_left.connect(func(id): _ready_peers.erase(id))
+	Net.player_joined.connect(_on_player_joined)
 
 func bind(pn: PlayerNet, svc: WeaponService, eco: EconomyService, zs: ZombieSync, pu: PowerupService, mt: Match, ms: MatchState) -> void:
 	net = pn
@@ -49,13 +50,20 @@ func _rx_ready() -> void:
 	if Net.is_host():
 		on_ready(multiplayer.get_remote_sender_id())
 
-## Host: peer `id` finished loading. Its spectator status, the world snapshot and the live zombies, once.
+## Host: a peer connected. Joining a running match makes it a spectator at once (not ALIVE, not counted, not
+## targetable), whether or not it ever finishes loading. A lobby join is left alone.
+func _on_player_joined(id: int) -> void:
+	if not Net.is_host() or id == Net.local_id():
+		return
+	if match_node != null and match_node.running and life != null and net != null and net.ensure_player(id) != null:
+		life.spectate(id)
+
+## Host: peer `id` finished loading. The world snapshot and the live zombies, once; broadcasts reach it from now on.
 func on_ready(id: int) -> void:
 	if not Net.is_host() or id == Net.local_id() or not Net.players.has(id) or _ready_peers.has(id):
 		return
 	_ready_peers[id] = true
-	if match_node != null and match_node.running and life != null and net != null and net.ensure_player(id) != null:
-		life.spectate(id)
+	Net.mark_ready(id)
 	Net.send_reliable(self, &"_rx_snapshot", id, [capture()])
 	if zombies != null:
 		zombies.send_live_to(id)

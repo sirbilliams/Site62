@@ -14,6 +14,7 @@ var hold := 0.0                  # 0..1 hold progress
 var target: Node                 # Interactable / Barricade / Player (downed) in reach
 var _t := 0.0
 var _need_release := false
+var _last_target: Node
 
 func bind(pn: PlayerNet, e: EconomyService, svc: WeaponService, ms: MatchState) -> void:
 	net = pn
@@ -60,6 +61,10 @@ func _update(dt: float, pressed: bool) -> void:
 				best = d
 				target = b
 				prompt = "Hold %s: Repair barricade" % Settings.key_label(&"use")
+	if target != _last_target:                              # a new target starts its hold from zero
+		_last_target = target
+		_t = 0.0
+		hold = 0.0
 	if not pressed:
 		_t = 0.0
 		hold = 0.0

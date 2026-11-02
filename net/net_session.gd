@@ -15,6 +15,8 @@ var debug_claims := {}           # host, debug only: sender id -> ["rejected:3",
 var _beacon: LanBeacon
 var _ready_emitted := false
 var link_sim := LinkSim.new()
+var require_ready := false       # host: peer-0 (broadcast) game messages go only to peers that finished loading (mark_ready)
+var _ready_peers := {}
 
 func _ready() -> void:
 	link_sim.configure_from_args()
@@ -51,7 +53,25 @@ func join(ip: String, port: int) -> Error:
 	multiplayer.multiplayer_peer = peer
 	return OK
 
+## Host: peer `id` built its game scene (the `ready` handshake). Broadcasts reach it from now on.
+func mark_ready(id: int) -> void:
+	if players.has(id):
+		_ready_peers[id] = true
+
+func is_ready(id: int) -> bool:
+	return id == local_id() or _ready_peers.has(id)
+
+## Host: the connected peers (not the host) that are ready.
+func ready_peers() -> Array:
+	var out: Array = []
+	for id in players.ids():
+		if id != local_id() and _ready_peers.has(id):
+			out.append(id)
+	return out
+
 func leave() -> void:
+	require_ready = false
+	_ready_peers.clear()
 	var me := local_id()
 	if _beacon:
 		_beacon.queue_free()
@@ -100,6 +120,11 @@ func _do_send(node: Node, method: StringName, peer: int, args: Array) -> void:
 		return
 	if peer != 0 and not multiplayer.get_peers().has(peer):
 		return                   # peer left while the message was in the sim queue
+	if peer == 0 and require_ready and is_host():
+		for id in multiplayer.get_peers():           # a joiner still loading has no node to receive it
+			if _ready_peers.has(id):
+				node.callv("rpc_id", [id, method] + args)
+		return
 	var a: Array = [method] + args
 	if peer != 0:
 		a = [peer, method] + args
@@ -127,6 +152,7 @@ func _on_peer_disconnected(id: int) -> void:
 	if not is_host() or not players.has(id):
 		return
 	players.remove(id)
+	_ready_peers.erase(id)
 	player_left.emit(id)
 	_sync_roster.rpc(players.to_dict())
 

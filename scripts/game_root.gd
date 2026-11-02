@@ -33,6 +33,7 @@ var _pause: Control
 var _resume: Button
 var _settings: SettingsScreen
 var _built := false
+var _left := false
 
 func _ready() -> void:
 	name = "GameRoot"
@@ -89,6 +90,7 @@ func _ready() -> void:
 	Net.player_left.connect(_on_left)
 	_built = true
 	if Net.is_host():
+		Net.require_ready = true                    # broadcasts only reach peers that sent `ready`
 		lobby.set_host(true)
 	else:
 		ws.announce_ready()                         # the handshake: scene built, now send me the world
@@ -104,11 +106,11 @@ func _build_ui() -> void:
 	hud.bind(net, svc, eco, pu, mt, ms, interact)
 	lobby = Lobby.new()
 	lobby.start_pressed.connect(start_match)
-	lobby.leave_pressed.connect(func(): leave_requested.emit(""))
+	lobby.leave_pressed.connect(func(): _leave(""))
 	_ui.add_child(lobby)
 	game_over = GameOver.new()
 	game_over.visible = false
-	game_over.back_pressed.connect(func(): leave_requested.emit(""))
+	game_over.back_pressed.connect(func(): _leave(""))
 	_ui.add_child(game_over)
 	_pause = _build_pause()
 	_pause.visible = false
@@ -143,7 +145,7 @@ func _build_pause() -> Control:
 	v.add_child(UiTheme.body("The operation continues without you.", 18, UiTheme.DIM))
 	for e in [["Resume", "RESUME", set_paused.bind(false)], ["Settings", "SETTINGS", func():
 			_pause.visible = false
-			_settings.visible = true], ["Leave", "LEAVE OPERATION", func(): leave_requested.emit("")]]:
+			_settings.visible = true], ["Leave", "LEAVE OPERATION", func(): _leave("")]]:
 		var b := Button.new()
 		b.name = e[0]
 		b.text = e[1]
@@ -172,9 +174,15 @@ func _on_game_over(stats: Dictionary) -> void:
 
 func _on_left(id: int) -> void:
 	if id == 1 and not Net.is_host():
-		leave_requested.emit("The host left the game.")
+		_leave("The host left the game.")
 	elif _built:
 		_refresh_lobby()
+
+func _leave(reason: String) -> void:
+	if _left:
+		return
+	_left = true
+	leave_requested.emit(reason)
 
 func _refresh_lobby() -> void:
 	var ids: Array = []
