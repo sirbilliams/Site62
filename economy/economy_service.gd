@@ -50,7 +50,7 @@ func _changed(peer: int) -> void:
 		p.points = wallet(peer).points
 	points_changed.emit(peer, wallet(peer).points)
 
-## Host: zombie hits pay pts_hit (zombie hit ids are negative).
+## Host: zombie hits pay pts_hit once per shot (zombie hit ids are negative).
 func on_hit(shooter: int, target: int, _dmg: float, _head: bool) -> void:
 	if target >= 0 or not _known(shooter):
 		return
@@ -58,6 +58,10 @@ func on_hit(shooter: int, target: int, _dmg: float, _head: bool) -> void:
 		var z: Zombie = zombies_sync.zombies.get(Zombie.zid_of(target))
 		if z == null or not z.alive:
 			return                          # corpse / despawned: no points
+	if weapons != null and weapons.pellet_paid:
+		return                              # one payout per shot, however many pellets hit
+	if weapons != null:
+		weapons.pellet_paid = true
 	wallet(shooter).add(Content.balance.pts_hit, _double())
 	_changed(shooter)
 

@@ -27,6 +27,7 @@ const SWAP_TOL := 0.25                   # fraction of swap_s forgiven for netwo
 
 var net: PlayerNet
 var history := HitHistory.new()
+var pellet_paid := false                 # host: a pellet of the current shot already earned hit points (economy pays once per shot)
 var targets := {}                        # id -> HitTarget (host: authoritative; client: visual copies)
 var kits := {}                           # peer id -> Inventory (host: all; client: local only)
 var grenade_scene: PackedScene = preload("res://weapons/grenade.tscn")
@@ -601,6 +602,7 @@ func _trace(sender: int, shooter: int, origin: Vector3, dir: Vector3, t: float, 
 	var top_dmg := -1.0
 	var any_head := false
 	var blocked := false
+	pellet_paid = false
 	for i in clampi(ws.data.pellets, 1, MAX_PELLETS):
 		var pd := Spread.pellet_dir(dir, cone, sender, seq, i)
 		var pick := pick_target(origin, pd, st_time)

@@ -182,3 +182,21 @@ func test_wall_buy_two_slots() -> void:
 	assert_eq(kit.slots[1].data.id, &"garand_k", "held gun untouched")
 	h.free(); g.free(); s.free()
 	_free(e)
+
+func test_multi_pellet_shot_pays_hit_points_once() -> void:
+	var e := _setup()
+	var zs := ZombieSync.new()
+	e.zombies_sync = zs
+	var svc := e.weapons
+	var z := Zombie.new()
+	zs.zombies[5] = z
+	e.wallet(1).points = 0
+	svc.pellet_paid = false          # new shot
+	for i in 8:
+		e.on_hit(1, Zombie.hit_id(5), 10.0, false)
+	assert_eq(e.wallet(1).points, Content.balance.pts_hit, "8 pellets, one payout")
+	svc.pellet_paid = false          # next shot
+	e.on_hit(1, Zombie.hit_id(5), 10.0, false)
+	assert_eq(e.wallet(1).points, Content.balance.pts_hit * 2, "next shot pays again")
+	z.free(); zs.free()
+	_free(e)
