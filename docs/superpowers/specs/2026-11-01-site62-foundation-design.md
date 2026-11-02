@@ -4,12 +4,12 @@ Date: 2026-11-01. Status: approved in chat section by section; awaiting spec rev
 
 ## Intent
 - **What Bill said:**
-  - Not a toy. A real foundation for a wave-based co-op zombie shooter in the genre of Call of Duty Zombies.
+  - Not a toy. A real foundation for a wave-based co-op zombie shooter in the wave-survival co-op shooter genre.
   - PC first, AYN Thor later. Godot 4. CC0 art to start.
   - Milestone 1 includes the core loop, online co-op for 1–4 players, power-ups and machines, and data-driven content.
   - Setting: a Cold War lab outbreak.
   - The perk machines are called **Ethereal-Suds**, with an early-70s soda feel.
-- **Constraint:** it is an original game in the genre. It has its own setting, lore, names, numbers and art. Nothing is taken from Call of Duty: no names, assets, maps or exact tuning values.
+- **Constraint:** it is an original game in the genre. It has its own setting, lore, names, numbers and art. Nothing is taken from any existing game: no names, assets, maps or exact tuning values.
 - **Success:** 1–4 friends can play a full match on Site 62 over the LAN, and it feels responsive. New guns and enemies can be added as data files without code.
 
 ## Decisions
@@ -17,7 +17,7 @@ Date: 2026-11-01. Status: approved in chat section by section; awaiting spec rev
 - **Rejected:**
   - Extracting a shared library from Neutron Arena: it is built for 5v5 PvP, and the extraction would risk a working game.
   - Starting from a single-player FPS template: every state-changing system would need rewriting for co-op. Template pieces that don't change game state (camera feel, weapon sway, interact prompts) may still be borrowed if they are MIT or CC0 licensed.
-- **Engine and tools:** Godot 4.7 (flatpak) and GDScript. The repo is `~/Projects/site62`, private on GitHub until Bill decides.
+- **Engine and tools:** Godot 4.7 (flatpak) and GDScript. The repo is public on GitHub, all rights reserved (Bill's decision 2026-11-02).
 - Working title: **Site 62**.
 
 ## 1. Architecture
@@ -59,11 +59,11 @@ Each unit talks to the others through signals or small public methods. No unit r
   - **Power switch:** Suds machines and the Refit station work only after it is thrown.
 
 ### Power-ups
-Kills drop power-ups, with a cap per round. Each lasts 30 s where it has a duration.
+Kills drop power-ups, with a cap per round. Each lasts 25 s where it has a duration.
 
 | Name | Effect |
 |---|---|
-| Bonus Ration | Double points |
+| Bonus Ration | Doubles points earned |
 | Resupply | Full ammo for everyone |
 | Purge | Kills all zombies on the map, gives flat points |
 | Overload | One-hit kills |
@@ -136,7 +136,7 @@ Screenshot tools capture every HUD and machine screen, and Claude reviews them b
 2. Wall-buys, doors, the crate, 4 Ethereal-Suds, Isotope Refit, the power switch, 6 power-ups and down/revive all work in co-op.
 3. At least 6 guns and 1 zombie type exist, all defined as data.
 4. All tests pass, and Linux and Windows PC builds exist.
-5. The GitHub repo is private.
+5. The GitHub repo is public, all rights reserved (Bill's decision 2026-11-02).
 
 ## Not in Milestone 1
 The Thor/Android port, more zombie types, easter-egg quests, wonder weapons, a dedicated Proxmox server, progression and unlocks.

@@ -82,7 +82,7 @@ func _link_zone(barricades: Array) -> Barricade:
 
 ## The open bulkhead whose link the zombie is between the ends of (off the nav mesh), or null.
 ## Without this the zombie re-paths from the middle of the link: its closest mesh point flips between the two ends and a slow
-## zombie ping-pongs at the door forever (found with tools/repro_door3.gd; every zombie behind it stacks up).
+## zombie ping-pongs at the door forever (every zombie behind it stacks up).
 func _door_zone(doors: Array) -> BulkheadDoor:
 	for d: BulkheadDoor in doors:
 		if not d.is_open or d.link == null:

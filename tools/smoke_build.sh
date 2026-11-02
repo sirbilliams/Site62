@@ -3,7 +3,7 @@
 # and wait for round 2; saves a screenshot. usage: tools/smoke_build.sh [shot.png]   (build it first with tools/export_pc.sh;
 # it runs build/Site62_smoke.x86_64, the only export that carries the scripted bot)
 cd "$(dirname "$0")/.." || exit 1
-SHOT=${1:-$HOME/Projects/arena-assets/shots/site62/build_round2.png}
+SHOT=${1:-$PWD/build/smoke_round2.png}
 mkdir -p "$(dirname "$SHOT")"
 LOG=${SMOKE_LOG:-/tmp/site62_smoke.log}
 inner=$(mktemp /tmp/smokeXXXX.sh)

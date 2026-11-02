@@ -11,7 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-11-01-site62-foundation-design.md`
 
 ## Global Constraints
-- Original game. No Call of Duty names, assets, maps or tuning. Use the names from the spec: Ethereal-Suds, Requisition Crate, Isotope Refit, Bonus Ration, Resupply, Purge, Overload, Fortify, Requisition Voucher.
+- Original game. No names, assets, maps or tuning copied from any existing game. Use the names from the spec: Ethereal-Suds, Requisition Crate, Isotope Refit, Bonus Ration, Resupply, Purge, Overload, Fortify, Requisition Voucher.
 - The host is authoritative. A client never changes shared game state itself; it sends a request and the host broadcasts the result. Every RPC that runs on the host checks `multiplayer.get_remote_sender_id()`.
 - Players: 1–4. Solo is a host with one player.
 - Network rates:
@@ -23,19 +23,19 @@
 - Gameplay values live only in `content/*.tres` or `content/balance.tres`. They are never hard-coded in systems.
 - Art: CC0 only. Every asset is listed in `content/CREDITS.md` with its source URL and licence.
 - Every test command uses `timeout`. The unit runner is `tests/run_unit.sh`. Multi-process tests are `tests/run_<name>_net.sh`, and each one takes `PORT` and `BP` (LAN beacon port) environment variables.
-- The repo is private on GitHub. Commit after every task.
+- The repo is public on GitHub, all rights reserved (Bill's decision 2026-11-02). Commit after every task.
 
 ### Balance values (`content/balance.tres`, Task 2), pinned for the tests
 | Key | Value |
 |---|---|
-| start_points | 500 |
-| pts_hit / pts_kill / pts_headshot_bonus / pts_melee_kill | 10 / 60 / 40 / 120 |
-| pts_board / board_cap_per_round | 10 / 400 |
+| start_points | 600 |
+| pts_hit / pts_kill / pts_headshot_bonus / pts_melee_kill | 5 / 50 / 30 / 120 |
+| pts_board / board_cap_per_round | 15 / 400 |
 | player_hp / downed_bleedout_s / revive_hold_s | 100 / 30 / 4.0 |
-| max_suds | 4 |
-| powerup_drop_chance / powerup_max_per_round / powerup_duration_s | 0.03 / 4 / 30 |
-| crate_cost / crate_moves_after_uses | 950 / 6 |
-| refit_cost | 5000 |
+| max_suds | 3 |
+| powerup_drop_chance / powerup_max_per_round / powerup_duration_s | 0.03 / 3 / 25 |
+| crate_cost / crate_moves_after_uses | 1000 / 6 |
+| refit_cost | 4500 |
 | fire_rate_tolerance | 0.10 |
 
 ### Round curve (`content/round_curve.tres`)
@@ -90,7 +90,7 @@
     - `scene: PackedScene`, `refit: WeaponData`, `is_wall_buy: bool`.
   - **`EnemyData`**: `id`, `speed_by_band: PackedFloat32Array` (3 values), `attack_damage: float`, `attack_interval_s: float`, `board_tear_s: float`, `scene: PackedScene`.
   - **`SudsData`**: `id`, `display_name`, `cost: int`, `effect: StringName` (`&"max_hp"`, `&"reload_mult"`, `&"revive"`, `&"fire_rate_mult"`), `value: float`, `color: Color`, `jingle: AudioStream`.
-  - **`PowerupData`**: `id`, `display_name`, `kind: StringName` (`&"double_points"`, `&"max_ammo"`, `&"purge"`, `&"overload"`, `&"fortify"`, `&"voucher"`), `duration_s: float`.
+  - **`PowerupData`**: `id`, `display_name`, `kind: StringName` (`&"bonus_ration"`, `&"resupply"`, `&"purge"`, `&"overload"`, `&"fortify"`, `&"voucher"`), `duration_s: float`.
   - **`RoundCurve`**:
     - `count(r: int, players: int) -> int`
     - `health(r: int) -> int`
@@ -114,11 +114,11 @@
   - `test_validator_empty_recoil`: an empty `recoil` array is reported.
 - [ ] Step 2: Run `tests/run_unit.sh content`. Expected: FAIL.
 - [ ] Step 3: Implement the types, `Content` and the validator. Validator rules: every cost ≥ 0, `refit != self`, refit weapons have `refit == null`, `mag > 0`, `recoil` not empty, `speed_by_band.size() == 3`.
-- [ ] Step 4: Author the `.tres` files. Six guns: M1911-style sidearm "Sentinel .45", SMG "Hornet", rifle "Garand-K", shotgun "Thresher", LMG "Bulwark-60", and the crate-only "Ray-Lancer" prototype. Each gets a refit version with ×2 damage, ×1.5 reserve and an `"Isotope"` name prefix. Four Suds, with placeholder soda names for Bill to rename:
-  - **Groovy Grape Bulwark:** `max_hp`, value 220, cost 2500.
-  - **Snapback Fizz:** `reload_mult`, value 0.5, cost 3000.
-  - **Second-Wind Root Beer:** `revive`, value 0.5 (revive time multiplier, plus solo self-revive), cost 1500.
-  - **Overclock Orange:** `fire_rate_mult`, value 1.33, cost 2000.
+- [ ] Step 4: Author the `.tres` files. Six guns: Compact sidearm "Sentinel .45", SMG "Hornet", rifle "Garand-K", shotgun "Thresher", LMG "Bulwark-60", and the crate-only "Cathode Carbine" prototype (hitscan energy carbine). Each gets a refit version with ×2 damage, ×1.5 reserve and an `"Isotope"` name prefix. Four Suds (players hold at most three), with placeholder soda names for Bill to rename:
+  - **Groovy Grape Bulwark:** `max_hp`, value 220, cost 2600.
+  - **Snapback Fizz:** `reload_mult`, value 0.5, cost 1800.
+  - **Second-Wind Root Beer:** `revive`, value 0.5 (revive time multiplier, plus solo self-revive), cost 1200.
+  - **Overclock Orange:** `fire_rate_mult`, value 1.33, cost 2200.
 - [ ] Step 5: Run the content tests. Expected: PASS. Commit with "content: data types, validator, M1 content".
 
 ### Task 3: Net session, players and sender checks
@@ -254,7 +254,7 @@
 **Interfaces:**
 - Consumes: `Content.balance`, `Zombie.died`, `WeaponService.hit`, `Barricade.board_repaired`.
 - Produces:
-  - **`Wallet`**: `points: int`, `add(n: int, double_points: bool)`, `try_spend(cost: int) -> bool`, `board_points_this_round: int`.
+  - **`Wallet`**: `points: int`, `add(n: int, bonus_ration: bool)`, `try_spend(cost: int) -> bool`, `board_points_this_round: int`.
   - **`EconomyService`**:
     - `request_use(player: int, interactable_path: NodePath)` (RPC); the host checks the sender, a distance ≤ 2.0 m and the cost;
     - signals `points_changed(player, points)`, `purchase(player, what: StringName, cost: int)`.
@@ -263,11 +263,11 @@
 - [ ] Step 1: Write the unit tests:
   - `test_points_hit_kill_headshot_melee`: points of 10 / 60 / 100 / 120.
   - `test_board_cap`: board points stop at 400 per round.
-  - `test_double_points`: a hit while double points is active gives 20.
+  - `test_bonus_ration`: a hit while bonus ration is active gives 10.
 - [ ] Step 2: Write `net_economy.gd`:
   - a client buys a wall gun and gets the weapon and the deducted points;
   - buying the same gun again buys ammo at `ammo_cost`;
-  - two clients use the same 750 door in the same tick (Review Focus 2): exactly one pays and the other keeps 500;
+  - two clients use the same 800 door in the same tick (Review Focus 2): exactly one pays and the other keeps their points;
   - a buy from 5 m away is rejected;
   - doors stay open for a client that joins afterwards.
   - Output: `ECONOMY NET PASS`.
@@ -287,9 +287,9 @@
   - **`SudsMachine`**: `suds: SudsData`. It requires power, refuses a duplicate Suds, and refuses at `max_suds`.
   - **`SudsEffects`**: `max_hp(base) -> float`, `reload_mult() -> float`, `revive_mult() -> float`, `fire_rate_mult() -> float`, `can_self_revive(solo: bool) -> bool`.
   - **`CrateSpot`**:
-    - `use` charges 950 (or 0 with a voucher) and rolls a weapon from the crate pool (all non-wall-buy weapons plus wall-buys, never the player's current guns), using a host-seeded RNG;
+    - `use` charges 1000 (or 0 with a voucher) and rolls a weapon from the crate pool (all non-wall-buy weapons plus wall-buys, never the player's current guns), using a host-seeded RNG;
     - after 6 uses it moves to another `CrateSpot`; signal `crate_moved(to: NodePath)`.
-  - **`RefitStation`**: requires power, costs 5000, replaces the held weapon with `data.refit`, and refuses if `refit == null`.
+  - **`RefitStation`**: requires power, costs 4500, replaces the held weapon with `data.refit`, and refuses if `refit == null`.
 - [ ] Step 1: Write the unit tests:
   - `test_suds_stack_effects`: all four Suds give max_hp 220, reload ×0.5, revive ×0.5, fire rate ×1.33.
   - `test_self_revive_only_solo`.
@@ -319,9 +319,9 @@
     - `force_drop(kind, pos)` (tests and debug only);
     - signals `dropped(kind, pos)`, `collected(kind, by)`.
   - **Effects:**
-    - `double_points` and `overload` last 30 s;
-    - `max_ammo` refills every player;
-    - `purge` kills every zombie and gives each player 400 points; those kills don't count toward drops;
+    - `bonus_ration` and `overload` last 25 s;
+    - `resupply` refills every player;
+    - `purge` kills every zombie and gives each player 350 points; those kills don't count toward drops;
     - `fortify` sets every barricade to 6;
     - `voucher` makes the next crate free.
 - [ ] Step 1: Write the unit tests:
@@ -382,10 +382,10 @@
 - Consumes: every map kit scene.
 - Produces a map with 5 zones:
   - `entrance_lab` (start; 2 barricades, Sentinel wall-buy);
-  - `cafeteria` (door 750);
-  - `offices` (door 1000);
-  - `reactor_wing` (door 1250, power switch);
-  - `refit_chamber` (door 1500, Isotope Refit).
+  - `cafeteria` (door 800);
+  - `offices` (door 1100);
+  - `reactor_wing` (door 1300, power switch);
+  - `refit_chamber` (door 1600, Isotope Refit).
 - 4 Suds machines spread across zones, 3 crate spots, 4 player starts, at least 2 spawn zones per area, and baked navigation.
 - [ ] Step 1: Write the map tests:
   - `test_map_has_required_nodes`: counts by group match the list above.
@@ -420,7 +420,7 @@
 - [ ] Step 2: Run it. Expected: FAIL until the bot client exists. Then implement the bot client and LinkSim.
 - [ ] Step 3: Run it. Expected: `SOAK PASS` with N ≥ 5.
 - [ ] Step 4: Run `tools/export_pc.sh`. It produces `build/Site62.x86_64` and `build/Site62.exe`. Launch the Linux build, host a match, and confirm it reaches round 2 with no errors in the log.
-- [ ] Step 5: Run every test (`tests/run_unit.sh` and every `tests/run_*_net.sh` with distinct ports). Expected: all PASS. Commit with "M1: soak test, PC exports". Push to the private GitHub repo.
+- [ ] Step 5: Run every test (`tests/run_unit.sh` and every `tests/run_*_net.sh` with distinct ports). Expected: all PASS. Commit with "M1: soak test, PC exports". Push to the GitHub repo.
 
 ## Execution order and parallelism
 - Tasks 1 → 2 → 3 must run in sequence.

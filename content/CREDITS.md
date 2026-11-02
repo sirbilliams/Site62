@@ -1,4 +1,4 @@
-# Credits (all art is CC0 / public domain)
+# Credits (all art is CC0 / public domain, except the two UI fonts, which are SIL OFL 1.1; each file below lists its licence)
 
 | Asset file | Pack | Author | URL | Licence |
 |---|---|---|---|---|

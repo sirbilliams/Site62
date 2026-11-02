@@ -25,14 +25,20 @@ hold the entrance, earn points, open the bulkheads and push deeper. Gameplay val
 
 All bindings can be changed in Settings.
 
-## Credits
+## Licence
 
-All art is CC0 (Poly Haven and others); see [content/CREDITS.md](content/CREDITS.md) for every file, author and licence.
+Copyright (c) 2026 sirbilliams. All rights reserved (see [LICENSE](LICENSE)). Third-party assets keep their own licences.
+Textures and models are CC0 (Poly Haven and others); the two UI fonts are SIL OFL 1.1. [content/CREDITS.md](content/CREDITS.md)
+lists every file, author, source and licence.
 
 ## Tests
 
 - Unit: `tests/run_unit.sh [filter]`
-- Multi-process network tests: `tests/run_*_net.sh` (each takes `PORT`, several take `RTT`/`LOSS`).
+- Multi-process network tests: `tests/run_*_net.sh` (each takes `PORT`, several take `RTT`/`LOSS`). Only
+  `run_basic_net.sh` reads `BP` (LAN beacon port); every other test switches the beacon off (`Net.beacon_port = 0`), so
+  `BP` has no effect there. The test hooks (`--test=...`, `--smoke=...`) exist only in debug builds and the "Linux Smoke"
+  export.
+- Run any of them under `timeout`, for example `timeout 600 env PORT=26410 tests/run_hostquit_net.sh`.
 - Full-match soak: `tests/run_soak_net.sh` runs the real game on a host plus 3 bot clients at 120 ms RTT and 3 % loss
   (`LOSS=0` for a clean link) and prints `SOAK PASS rounds=N`.
 
