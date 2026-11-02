@@ -35,7 +35,7 @@ func test_round1_spawns_count() -> void:
 	
 	var zone_a := _create_spawn_zone(&"zone_a", true)
 	var zone_b := _create_spawn_zone(&"zone_b", true)
-	var zones := [zone_a, zone_b]
+	var zones: Array[SpawnZone] = [zone_a, zone_b]
 	
 	var director := RoundDirector.new()
 	director.set_curve(curve)
@@ -61,7 +61,7 @@ func test_alive_cap_40() -> void:
 	curve.break_s = 10.0
 	
 	var zone_a := _create_spawn_zone(&"zone_a", true)
-	var zones := [zone_a]
+	var zones: Array[SpawnZone] = [zone_a]
 	
 	var director := RoundDirector.new()
 	director.set_curve(curve)
@@ -91,7 +91,7 @@ func test_spawns_only_open_zones() -> void:
 	
 	var zone_a := _create_spawn_zone(&"zone_a", false)
 	var zone_b := _create_spawn_zone(&"zone_b", false)
-	var zones := [zone_a, zone_b]
+	var zones: Array[SpawnZone] = [zone_a, zone_b]
 	
 	var spawner := FakeSpawner.new()
 	
@@ -121,7 +121,7 @@ func test_break_then_next_round() -> void:
 	curve.break_s = 10.0
 	
 	var zone_a := _create_spawn_zone(&"zone_a", true)
-	var zones := [zone_a]
+	var zones: Array[SpawnZone] = [zone_a]
 	
 	var director := RoundDirector.new()
 	director.set_curve(curve)
@@ -154,7 +154,7 @@ func test_health_per_round() -> void:
 	curve.break_s = 10.0
 	
 	var zone_a := _create_spawn_zone(&"zone_a", true)
-	var zones := [zone_a]
+	var zones: Array[SpawnZone] = [zone_a]
 	
 	var spawner := FakeHealthSpawner.new()
 	
